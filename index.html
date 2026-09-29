@@ -1,0 +1,1551 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Granja de Cerdas en Bandas</title>
+<!--
+  Granja de cerdas en bandas: simulador 3D del manejo en banda semanal.
+  © 2026 Anastasio Argüello Henríquez (ORCID 0000-0002-4426-0678), Universidad de Las Palmas de Gran Canaria.
+  Licencia Creative Commons Reconocimiento-NoComercial-CompartirIgual 4.0 Internacional (CC BY-NC-SA 4.0).
+  https://creativecommons.org/licenses/by-nc-sa/4.0/deed.es
+-->
+<meta name="author" content="Anastasio Argüello Henríquez">
+<meta name="description" content="Simulador 3D docente del manejo de cerdas reproductoras en banda semanal: cubrición-control, gestación y maternidad.">
+<link rel="license" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: la maqueta 3D ocupa toda la pantalla; tres paneles flotan sobre ella (manejo, resultado, lotes).
+   En móvil la maqueta va arriba y los paneles se apilan debajo. El único gesto fuerte: el resultado en un crotal amarillo. */
+:root {
+  --bg: #e8ede9; --panel: #fbfcfa; --panel-a: rgba(251, 252, 250, .93); --ink: #15211b; --ink2: #3f4f46;
+  --muted: #66766d; --line: #d2dbd4; --chip: #edf2ee; --hover: #e3eae5;
+  --tag: #f2c11d; --tag-ink: #241c00; --tag-edge: #caa00f;
+  --cc: #3b5bdb; --gest: #0f8a6a; --mat: #d9770f; --crit: #c62f2f; --clean: #0f7ea3;
+  --bar: #54655b; --grid: #dfe6e1;
+  --sky1: #8ec6ec; --sky2: #eaf3f1; --fog: #dfeaea; --sun: 1;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "Barlow", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+  --shadow: 0 1px 2px rgba(20, 40, 30, .08), 0 8px 24px rgba(20, 40, 30, .12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1411; --panel: #16201b; --panel-a: rgba(19, 28, 23, .92); --ink: #e5eee8; --ink2: #b9c8bf;
+    --muted: #8a9d92; --line: #2a3a32; --chip: #1e2a24; --hover: #24332b;
+    --tag: #f2c11d; --tag-ink: #241c00; --tag-edge: #b99210;
+    --cc: #5b78f0; --gest: #1fa67c; --mat: #d2721c; --crit: #ff6b6b; --clean: #41b9dd;
+    --bar: #9db1a6; --grid: #26352d;
+    --sky1: #0e1a2e; --sky2: #3b4a5c; --fog: #25303b; --sun: .45;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1411; --panel: #16201b; --panel-a: rgba(19, 28, 23, .92); --ink: #e5eee8; --ink2: #b9c8bf;
+  --muted: #8a9d92; --line: #2a3a32; --chip: #1e2a24; --hover: #24332b;
+  --tag: #f2c11d; --tag-ink: #241c00; --tag-edge: #b99210;
+  --cc: #5b78f0; --gest: #1fa67c; --mat: #d2721c; --crit: #ff6b6b; --clean: #41b9dd;
+  --bar: #9db1a6; --grid: #26352d;
+  --sky1: #0e1a2e; --sky2: #3b4a5c; --fog: #25303b; --sun: .45;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 400 14px/1.45 var(--f-body); -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--tag-edge); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+
+#app { position: relative; height: 100%; overflow: hidden; }
+#stage { position: absolute; inset: 0; background: var(--sky2); z-index: 0; }
+#stage canvas { display: block; touch-action: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 1; }
+
+.panel {
+  position: absolute; z-index: 5; background: var(--panel-a); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--shadow); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; min-width: 0;
+}
+#pControls { left: 16px; top: 16px; width: 318px; }
+#pResults { right: 16px; top: 16px; width: 388px; max-height: calc(100% - 88px); overflow: auto; }
+#pBatches { left: 16px; bottom: 16px; width: min(560px, calc(100% - 420px)); }
+
+.eyebrow { font: 600 11px/1.3 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font: 700 26px/1.02 var(--f-display); letter-spacing: .01em; text-wrap: balance; }
+h2 { margin: 0; font: 600 13px/1.2 var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink2); }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+
+.field { display: grid; gap: 6px; }
+.field-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.field label { font-weight: 600; font-size: 13px; }
+.field .hint { color: var(--muted); font-size: 12px; margin: 0; }
+.val { display: inline-flex; align-items: baseline; gap: 4px; }
+.val input[type=number] {
+  width: 74px; text-align: right; font: 600 18px/1 var(--f-display); background: var(--chip); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 6px; font-variant-numeric: tabular-nums;
+}
+.val output { font: 700 22px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.val small { color: var(--muted); font-size: 12px; }
+input[type=range] { width: 100%; accent-color: var(--tag-edge); height: 22px; margin: 0; }
+
+.transport { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn {
+  border: 1px solid var(--line); background: var(--chip); border-radius: 7px; padding: 6px 10px; cursor: pointer;
+  font-weight: 600; font-size: 13px; line-height: 1.1; display: inline-flex; align-items: center; gap: 6px;
+}
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--tag); color: var(--tag-ink); border-color: var(--tag-edge); min-width: 104px; justify-content: center; }
+.btn.primary:hover { filter: brightness(1.05); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--chip); padding: 6px 8px; font-size: 12px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.seg-label { font-size: 12px; color: var(--muted); }
+
+.clock { display: flex; align-items: baseline; gap: 10px; padding-top: 2px; border-top: 1px solid var(--line); padding-top: 10px; }
+.clock b { font: 700 22px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.clock span { color: var(--muted); font-size: 13px; }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; min-height: 76px; }
+.log li { display: grid; grid-template-columns: 58px 1fr; gap: 6px; color: var(--ink2); }
+.log li time { color: var(--muted); font-family: var(--f-mono); font-size: 11px; padding-top: 1px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+
+/* resultado en un crotal */
+.result { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center; }
+.crotal {
+  position: relative; background: var(--tag); color: var(--tag-ink); border: 2px solid var(--tag-edge);
+  border-radius: 18px 18px 12px 12px; padding: 26px 16px 10px; min-width: 132px; text-align: center;
+  box-shadow: inset 0 -3px 0 rgba(0,0,0,.08);
+}
+.crotal::before {
+  content: ""; position: absolute; top: 8px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%;
+  background: var(--panel); box-shadow: inset 0 0 0 2px var(--tag-edge);
+}
+.crotal b { display: block; font: 700 54px/0.95 var(--f-display); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.crotal span { display: block; font: 600 11px/1.2 var(--f-body); letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; }
+.iep { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 13px; align-content: center; }
+.iep dt { color: var(--ink2); }
+.iep dd { margin: 0; text-align: right; font-family: var(--f-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.iep .sum { border-top: 1px solid var(--line); padding-top: 4px; font-weight: 600; color: var(--ink); }
+.iep dd.hl { background: var(--tag); color: var(--tag-ink); border-radius: 4px; padding: 0 5px; }
+.formula { font: 400 12.5px/1.5 var(--f-mono); color: var(--ink2); margin: 0; }
+.formula strong { color: var(--ink); font-weight: 500; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.kpi { background: var(--chip); border-radius: 8px; padding: 8px 9px; min-width: 0; }
+.kpi b { display: block; font: 700 20px/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.kpi span { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.25; margin-top: 3px; }
+
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th { text-align: right; font: 600 10.5px/1.2 var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 0 6px 6px; vertical-align: bottom; }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+td { text-align: right; padding: 7px 0 7px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+td small { display: block; color: var(--muted); font-size: 11px; line-height: 1.3; }
+tr.total td { font-weight: 600; }
+.ph { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.ph i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.flag { display: inline-block; margin-top: 3px; font-size: 11px; font-weight: 600; color: var(--crit); }
+.flag::before { content: "▲ "; font-size: 9px; }
+.note { margin: 0; font-size: 12px; color: var(--muted); }
+.credit { margin: 0; font-size: 11.5px; line-height: 1.4; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+.credit a { color: var(--ink2); }
+
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 150px; overflow: visible; }
+.chart .axis { fill: var(--muted); font: 500 10.5px var(--f-body); }
+.chart .ref { font: 600 10.5px var(--f-body); }
+.tip {
+  position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); font-size: 12px; line-height: 1.35;
+  padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -100%); box-shadow: var(--shadow);
+}
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink2); margin: 0; padding: 0; list-style: none; }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.sw.lotes { background: conic-gradient(#e6194b, #f58231, #ffe119, #3cb44b, #42d4f4, #4363d8, #911eb4, #f032e6, #e6194b); border-radius: 50%; }
+
+/* barra de la escena */
+.toolbar { position: absolute; z-index: 6; bottom: 16px; right: 16px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100% - 610px); }
+.toolbar .seg { box-shadow: var(--shadow); }
+.toolbar .seg button { padding: 7px 10px; background: var(--panel-a); }
+.toolbar .seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+
+.sowcard { position: absolute; z-index: 7; left: 50%; top: 16px; transform: translateX(-50%); width: 300px; padding: 14px; gap: 10px; }
+.sowcard header { display: flex; align-items: center; gap: 10px; }
+.tagno { background: var(--tag); color: var(--tag-ink); border: 2px solid var(--tag-edge); border-radius: 10px 10px 7px 7px; font: 700 20px/1 var(--f-display); padding: 8px 10px 5px; font-variant-numeric: tabular-nums; }
+.sowcard dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+.sowcard dt { color: var(--muted); }
+.sowcard dd { margin: 0; font-weight: 500; }
+.x { margin-left: auto; border: 0; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; color: var(--muted); padding: 4px 6px; }
+
+#loading { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; color: var(--ink2); font: 600 15px var(--f-body); pointer-events: none; }
+#loading.err { color: var(--crit); padding: 24px; text-align: center; pointer-events: auto; }
+
+/* etiquetas 3D */
+.lbl { font: 600 11.5px/1.2 var(--f-body); color: var(--ink); background: var(--panel-a); border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.12); }
+.lbl .dot { width: 8px; height: 8px; }
+.lbl.bld { font: 700 14px/1.1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; padding: 5px 9px; border-width: 0 0 0 4px; border-radius: 4px; }
+.lbl.bld small { display: block; font: 500 11.5px/1.2 var(--f-body); letter-spacing: 0; text-transform: none; color: var(--ink2); }
+.lbl.clean { color: var(--clean); border-color: var(--clean); }
+.lbl.crit { color: var(--crit); border-color: var(--crit); font-weight: 700; }
+.lbl.ring { background: transparent; border: 0; box-shadow: none; font: 700 12px/1.1 var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); text-align: center; }
+.lbl.ring.center { font-size: 15px; }
+.lbl.ring small { display: block; font: 600 11px var(--f-body); letter-spacing: 0; text-transform: none; }
+.lbls-off .lbl { display: none; }
+.small-off .lbl.sm { display: none; }
+
+@media (max-width: 1100px) {
+  #pResults { width: 340px; }
+  #pBatches { width: calc(100% - 390px); }
+  .toolbar { bottom: auto; top: 16px; right: auto; left: 350px; max-width: calc(100% - 740px); justify-content: flex-start; }
+}
+@media (max-width: 900px) {
+  html, body { height: auto; }
+  #app { height: auto; overflow: visible; display: flex; flex-direction: column; gap: 12px; padding-block: 0 16px; }
+  #stage { position: relative; inset: auto; height: min(62svh, 560px); min-height: 360px; }
+  .panel { position: static; width: auto !important; max-height: none; margin: 0 16px; }
+  #pBatches { width: auto; }
+  .toolbar { bottom: 12px; right: 12px; left: 12px; max-width: none; justify-content: center; }
+  .toolbar .seg button { padding: 6px 8px; }
+  .sowcard { top: 12px; right: 12px; left: 12px; width: auto; margin: 0; position: absolute; transform: none; }
+}
+@media (max-width: 420px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .result { grid-template-columns: 1fr; }
+  .crotal { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<style>body{margin:0}img{max-width:100%}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+</head>
+<body>
+<div id="app">
+  <section id="stage" aria-label="Maqueta 3D de la granja">
+    <div id="labels"></div>
+    <div id="loading">Montando la granja…</div>
+    <div class="toolbar" role="toolbar" aria-label="Vistas de la maqueta">
+      <div class="seg" id="views">
+        <button type="button" data-view="all" aria-pressed="true">Granja</button>
+        <button type="button" data-view="cc" aria-pressed="false">Cubrición-control</button>
+        <button type="button" data-view="g" aria-pressed="false">Gestación</button>
+        <button type="button" data-view="m" aria-pressed="false">Maternidad</button>
+      </div>
+      <div class="seg">
+        <button type="button" id="tLabels" aria-pressed="true">Etiquetas</button>
+        <button type="button" id="tRotate" aria-pressed="false">Girar</button>
+      </div>
+    </div>
+    <aside class="panel sowcard" id="sowCard" hidden aria-live="polite">
+      <header>
+        <span class="tagno" id="scTag">0000</span>
+        <div><div class="eyebrow">Cerda seleccionada</div><div id="scLote" style="font-weight:600"></div></div>
+        <button class="x" type="button" id="scClose" aria-label="Cerrar ficha">×</button>
+      </header>
+      <dl id="scBody"></dl>
+    </aside>
+  </section>
+
+  <aside class="panel" id="pControls" aria-label="Manejo de la granja">
+    <div>
+      <div class="eyebrow">Producción porcina · banda semanal</div>
+      <h1>Granja de cerdas en bandas</h1>
+      <p class="sub">Toca una cerda para ver su ficha. La marca de color en el lomo es su lote.</p>
+    </div>
+    <div class="field">
+      <div class="field-top">
+        <label for="nSows">Cerdas en la granja</label>
+        <span class="val"><input type="number" id="nSowsNum" min="42" max="1500" step="1" value="504" aria-label="Número de cerdas"></span>
+      </div>
+      <input type="range" id="nSows" min="42" max="1500" step="1" value="504">
+      <p class="hint" id="nHint">21 lotes de 24 cerdas</p>
+    </div>
+    <div class="field">
+      <div class="field-top">
+        <label for="idc">Intervalo destete–cubrición efectiva</label>
+        <span class="val"><output id="idcOut" for="idc">5</output><small>días</small></span>
+      </div>
+      <input type="range" id="idc" min="5" max="40" step="1" value="5">
+      <p class="hint">Media; cada cerda recibe un valor al azar. Se aplica a los próximos destetes.</p>
+    </div>
+    <div class="transport">
+      <button class="btn primary" type="button" id="play">Pausar</button>
+      <div class="seg" id="speed" role="group" aria-label="Velocidad (días por segundo)">
+        <button type="button" data-s="0.5" aria-pressed="false">½</button>
+        <button type="button" data-s="1" aria-pressed="true">1</button>
+        <button type="button" data-s="3" aria-pressed="false">3</button>
+        <button type="button" data-s="7" aria-pressed="false">7</button>
+        <button type="button" data-s="14" aria-pressed="false">14</button>
+      </div>
+      <span class="seg-label">días/s</span>
+      <button class="btn" type="button" id="reset">Reiniciar</button>
+    </div>
+    <div class="clock"><b id="clkDay">Día 0</b><span id="clkMeta">martes · semana 1</span></div>
+    <ul class="log" id="log" aria-label="Actividad reciente"></ul>
+    <p class="credit">© 2026 Anastasio Argüello Henríquez · Universidad de Las Palmas de Gran Canaria · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.es" target="_blank" rel="license noopener">CC BY-NC-SA 4.0</a></p>
+  </aside>
+
+  <aside class="panel" id="pResults" aria-label="Resultados">
+    <div class="result">
+      <div class="crotal"><b id="pha" class="num">2,48</b><span>partos / hembra / año</span></div>
+      <dl class="iep">
+        <dt>Gestación</dt><dd>114 d</dd>
+        <dt>Lactación</dt><dd>28 d</dd>
+        <dt>Destete–cubrición efectiva</dt><dd class="hl" id="iIdc">5 d</dd>
+        <dt class="sum">Intervalo entre partos</dt><dd class="sum" id="iIep">147 d</dd>
+      </dl>
+    </div>
+    <p class="formula" id="formula"></p>
+    <div class="kpis">
+      <div class="kpi"><b id="kSim">–</b><span>simulado (partos del último año)</span></div>
+      <div class="kpi"><b id="kLote">–</b><span>cerdas por lote y semana</span></div>
+      <div class="kpi"><b id="kNpd">–</b><span>días improductivos / cerda / año</span></div>
+    </div>
+    <div>
+      <h2 style="margin-bottom:8px">Plazas y salas</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fase</th><th>Días</th><th>Lotes</th><th>Plazas<br>necesarias</th><th>Ocupadas /<br>construidas</th></tr></thead>
+          <tbody id="tBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note" id="designNote"></p>
+  </aside>
+
+  <aside class="panel" id="pBatches" aria-label="Tamaño de los lotes">
+    <div class="field-top"><h2>Cubriciones por semana (tamaño de lote)</h2><span class="seg-label" id="chartMeta"></span></div>
+    <div class="chart" id="chart"><svg id="chartSvg" role="img" aria-label="Cerdas cubiertas en cada una de las últimas semanas"></svg><div class="tip" id="tip" hidden></div></div>
+    <ul class="legend">
+      <li><span class="sw lotes"></span>Color del lote (marca en el lomo)</li>
+      <li><span class="sw" style="background:#f4f4f2"></span>Vacía, aún sin cubrir</li>
+      <li><span class="sw" style="background:var(--clean)"></span>Sala en vacío sanitario</li>
+      <li><span class="sw" style="background:var(--crit)"></span>Sin plaza</li>
+    </ul>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+// ================= MODELO DE LA GRANJA (sin dependencias) =================
+// Manejo en banda semanal: cada lote (semana de cubrición) se mueve junto.
+// Cubrición individual = destete + IDC; parto individual = cubrición + 114 d.
+// Movimientos por lote: diagnóstico (Sn+21), entrada a maternidad (Sn+107),
+// destete (Sn+142), con Sn = día nominal de cubrición del lote.
+const GEST = 114, LACT = 28, PRE = 7, DIAG = 21;
+const N_PENS = 13, N_ROOMS = 6, N_LOTES = 21, IDC_OBJ = 5;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Intervalo destete-cubrición efectiva: 3 días + gamma(k = 4) con la media pedida
+function drawIDC(rng, mean) {
+  const min = 3;
+  if (mean <= min) return min;
+  const k = 4, th = (mean - min) / k;
+  let s = 0;
+  for (let i = 0; i < k; i++) s -= Math.log(1 - rng());
+  return Math.min(150, Math.round(min + th * s));
+}
+
+const mod = (a, n) => ((a % n) + n) % n;
+const loteOf = (week) => mod(week, N_LOTES) + 1;
+const nominalServ = (week) => 7 * week + 3;           // martes de la semana del lote
+const DOW = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
+const dowOf = (day) => DOW[mod(Math.floor(day) - 2, 7)]; // el destete cae en jueves
+
+function theory(N, idc) {
+  const iep = GEST + LACT + idc;
+  const ccDays = idc + DIAG, gDays = GEST - DIAG - PRE, mDays = PRE + LACT;
+  return {
+    iep, pha: 365 / iep, perLote: N * 7 / iep, npd: idc * 365 / iep,
+    cc: { days: ccDays, lotes: ccDays / 7, plazas: N * ccDays / iep },
+    g: { days: gDays, lotes: gDays / 7, plazas: N * gDays / iep },
+    m: { days: mDays, lotes: mDays / 7, plazas: N * mDays / iep },
+  };
+}
+
+// Granja dimensionada para el objetivo (IDC = 5 d -> 21 lotes semanales)
+function design(N) {
+  const S = N / N_LOTES;
+  return {
+    S,
+    stalls: Math.max(6, Math.ceil(4.4 * S)),   // 26 d = 3,7 lotes -> 4 lotes + 10 %
+    penCap: Math.max(3, Math.ceil(1.3 * S)),   // un corral por lote
+    crates: Math.max(2, Math.ceil(1.15 * S)),  // parideras por sala (+15 %)
+  };
+}
+
+class Farm {
+  constructor(N, idcMean, seed = 7) {
+    this.N = N; this.idcMean = idcMean; this.rng = mulberry32(seed * 7919 + N);
+    this.d = design(N);
+    this.t = 0;
+    this.events = [];
+    this.stalls = new Int32Array(this.d.stalls).fill(-1);
+    this.ccOver = []; this.ccQueue = [];
+    this.pens = Array.from({ length: N_PENS }, () => new Array(this.d.penCap).fill(-1));
+    this.crates = Array.from({ length: N_ROOMS }, () => new Int32Array(this.d.crates).fill(-1));
+    this.mOver = [];
+    this.servByWeek = new Map();
+    this.farrowLog = [];   // {day, iep}
+    this.servLog = [];     // {day, idc}
+    this.totals = { farrow: 0, piglets: 0, weaned: 0 };
+    this.sows = [];
+    const rng = this.rng;
+    const order = Array.from({ length: N }, (_, i) => i);
+    for (let i = N - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    for (let i = 0; i < N; i++) {
+      const k = order[i] % N_LOTES;           // lote k: cubierto hace k semanas
+      const week = -k, Sn = nominalServ(week);
+      const idc0 = drawIDC(rng, IDC_OBJ);
+      const serv = Sn + Math.max(-3, Math.min(3, idc0 - IDC_OBJ));
+      const s = {
+        id: i, ho: rng(), week, serv, idc: serv - (Sn - IDC_OBJ), wean: Sn - IDC_OBJ,
+        farrow: serv + GEST, prevFarrow: serv - (GEST + LACT + IDC_OBJ) + Math.round(rng() * 2 - 1),
+        parity: 1 + Math.floor(rng() * 6), litter: 10 + Math.floor(rng() * 5),
+        f: 0, zone: null, slot: -1, room: -1, pen: -1, phase: '', cycles: 0,
+      };
+      this.sows.push(s);
+    }
+    for (const s of this.sows) {
+      for (let b = 0; b < 4; b++) if (0 >= this.evTime(s, b)) s.f |= 1 << b;
+      s.phase = this.phaseOf(s);
+      this.farrowLog.push({ day: (s.f & 8) ? s.farrow : s.prevFarrow, iep: GEST + LACT + s.idc });
+      if (s.f & 1) { this.servLog.push({ day: s.serv, idc: s.idc }); this.addServ(s.week); }
+    }
+    this.farrowLog.sort((a, b) => a.day - b.day);
+    const entry = (s) => (s.phase === 'vacia' || s.phase === 'cubierta') ? s.wean : s.phase === 'gestante' ? this.evTime(s, 1) : this.evTime(s, 2);
+    const sorted = [...this.sows].sort((a, b) => entry(a) - entry(b) || a.id - b.id);
+    for (const s of sorted) this.place(s, this.zoneOfPhase(s.phase), true);
+  }
+
+  // hora del día a la que ocurre cada acontecimiento (fracción de día)
+  // 0 cubrición (individual) · 1 diagnóstico -> gestación (lote) · 2 entrada a maternidad (lote)
+  // 3 parto (individual) · 4 destete (lote)
+  evTime(s, b) {
+    const Sn = nominalServ(s.week);
+    switch (b) {
+      case 0: return s.serv + 0.35 + 0.3 * s.ho;
+      case 1: return Sn + DIAG + 0.4 + 0.1 * s.ho;
+      case 2: return Sn + GEST - PRE + 0.62 + 0.1 * s.ho;
+      case 3: return s.farrow + 0.1 + 0.8 * s.ho;
+      case 4: return Sn + GEST + LACT + 0.36 + 0.1 * s.ho;
+    }
+  }
+
+  addServ(week) { this.servByWeek.set(week, (this.servByWeek.get(week) || 0) + 1); }
+  phaseOf(s) {
+    if (!(s.f & 1)) return 'vacia';
+    if (!(s.f & 2)) return 'cubierta';
+    if (!(s.f & 4)) return 'gestante';
+    if (!(s.f & 8)) return 'preparto';
+    return 'lactante';
+  }
+  zoneOfPhase(p) { return (p === 'vacia' || p === 'cubierta') ? 'cc' : p === 'gestante' ? 'g' : 'm'; }
+
+  // ---------- plazas ----------
+  place(s, zone, initial = false) {
+    const from = { zone: s.zone, slot: s.slot, room: s.room, pen: s.pen };
+    s.zone = zone; s.slot = -1; s.room = -1; s.pen = -1;
+    if (zone === 'cc') {
+      const i = this.stalls.indexOf(-1);
+      if (i >= 0) { this.stalls[i] = s.id; s.slot = i; }
+      else { s.zone = 'ccOver'; s.slot = this.freeIn(this.ccOver, s.id); this.ccQueue.push(s.id); }
+    } else if (zone === 'g') {
+      s.pen = mod(s.week, N_PENS);
+      s.slot = this.freeIn(this.pens[s.pen], s.id);
+    } else {
+      s.room = mod(s.week, N_ROOMS);
+      const i = this.crates[s.room].indexOf(-1);
+      if (i >= 0) { this.crates[s.room][i] = s.id; s.slot = i; }
+      else { s.zone = 'mOver'; s.slot = this.freeIn(this.mOver, s.id); }
+    }
+    if (!initial) this.events.push({ type: 'move', id: s.id, from, to: { zone: s.zone, slot: s.slot, room: s.room, pen: s.pen } });
+  }
+  freeIn(arr, id) { const i = arr.indexOf(-1); if (i < 0) { arr.push(id); return arr.length - 1; } arr[i] = id; return i; }
+  release(s) {
+    if (s.zone === 'cc') {
+      this.stalls[s.slot] = -1;
+      if (this.ccQueue.length) {           // una cerda sin jaula ocupa la que queda libre
+        const w = this.sows[this.ccQueue.shift()];
+        const from = { zone: 'ccOver', slot: w.slot };
+        this.ccOver[w.slot] = -1;
+        this.stalls[s.slot] = w.id; w.zone = 'cc'; w.slot = s.slot;
+        this.events.push({ type: 'move', id: w.id, from, to: { zone: 'cc', slot: w.slot } });
+      }
+    } else if (s.zone === 'ccOver') {
+      this.ccOver[s.slot] = -1;
+      const q = this.ccQueue.indexOf(s.id); if (q >= 0) this.ccQueue.splice(q, 1);
+    } else if (s.zone === 'g') this.pens[s.pen][s.slot] = -1;
+    else if (s.zone === 'm') this.crates[s.room][s.slot] = -1;
+    else if (s.zone === 'mOver') this.mOver[s.slot] = -1;
+  }
+  move(s, zone) { this.release(s); this.place(s, zone); }
+
+  // ---------- avance del tiempo ----------
+  step(t) {
+    this.t = t;
+    for (const s of this.sows) {
+      for (let guard = 0; guard < 12; guard++) {
+        if (!(s.f & 1) && t >= this.evTime(s, 0)) {
+          s.f |= 1; s.phase = 'cubierta'; this.addServ(s.week);
+          this.servLog.push({ day: s.serv, idc: s.idc });
+          this.events.push({ type: 'serv', id: s.id });
+        } else if (!(s.f & 2) && t >= this.evTime(s, 1)) {
+          s.f |= 2; s.phase = 'gestante'; this.events.push({ type: 'conf', id: s.id }); this.move(s, 'g');
+        } else if (!(s.f & 4) && t >= this.evTime(s, 2)) {
+          s.f |= 4; s.phase = 'preparto'; this.move(s, 'm');
+        } else if (!(s.f & 8) && t >= this.evTime(s, 3)) {
+          s.f |= 8; s.phase = 'lactante'; s.parity++;
+          this.totals.farrow++; this.totals.piglets += s.litter;
+          this.farrowLog.push({ day: s.farrow, iep: s.farrow - s.prevFarrow });
+          this.events.push({ type: 'farrow', id: s.id });
+        } else if ((s.f & 8) && t >= this.evTime(s, 4)) {
+          this.totals.weaned += s.litter;
+          const oldWeek = s.week, oldRoom = s.room, litter = s.litter;
+          s.wean = nominalServ(s.week) + GEST + LACT;
+          s.prevFarrow = s.farrow;
+          s.idc = drawIDC(this.rng, this.idcMean);
+          s.serv = s.wean + s.idc; s.week = Math.floor(s.serv / 7); s.farrow = s.serv + GEST;
+          s.litter = 10 + Math.floor(this.rng() * 5); s.f = 0; s.phase = 'vacia'; s.cycles++;
+          this.events.push({ type: 'wean', id: s.id, week: oldWeek, room: oldRoom, litter });
+          this.move(s, 'cc');
+        } else break;
+      }
+    }
+    while (this.farrowLog.length && this.farrowLog[0].day < t - 365) this.farrowLog.shift();
+    while (this.servLog.length && this.servLog[0].day < t - 365) this.servLog.shift();
+  }
+
+  stats() {
+    const c = { vacia: 0, cubierta: 0, gestante: 0, preparto: 0, lactante: 0 };
+    for (const s of this.sows) c[s.phase]++;
+    let a = 0; for (const f of this.farrowLog) a += f.iep;
+    const iepObs = this.farrowLog.length ? a / this.farrowLog.length : NaN;
+    let b = 0; for (const x of this.servLog) b += x.idc;
+    const idcObs = this.servLog.length ? b / this.servLog.length : NaN;
+    const rooms = this.crates.map((cr, r) => {
+      let n = 0, over = 0; const weeks = new Set();
+      for (const id of cr) if (id >= 0) { n++; weeks.add(this.sows[id].week); }
+      for (const id of this.mOver) if (id >= 0 && this.sows[id].room === r) { n++; over++; weeks.add(this.sows[id].week); }
+      return { n, over, weeks: [...weeks], cap: cr.length };
+    });
+    const pens = this.pens.map((p) => {
+      let n = 0; const weeks = new Set();
+      for (const id of p) if (id >= 0) { n++; weeks.add(this.sows[id].week); }
+      return { n, weeks: [...weeks], cap: this.d.penCap };
+    });
+    let lact = 0, piglets = 0;
+    for (const s of this.sows) if (s.phase === 'lactante') { lact++; piglets += s.litter; }
+    return {
+      c, cc: c.vacia + c.cubierta, g: c.gestante, m: c.preparto + c.lactante,
+      ccOver: this.ccQueue.length, mOver: this.mOver.filter((x) => x >= 0).length,
+      iepObs, phaObs: 365 / iepObs, idcObs, rooms, pens, piglets,
+      pensUsed: pens.filter((p) => p.n > 0).length, roomsUsed: rooms.filter((r) => r.n > 0).length,
+    };
+  }
+}
+
+// ================= ESCENA 3D =================
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const $ = (id) => document.getElementById(id);
+const fmt = (x, d = 0) => Number.isFinite(x) ? x.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d }) : '–';
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// color de cada lote: pasos de 137° de tono para que lotes vecinos contrasten
+const LOTE_HEX = Array.from({ length: N_LOTES }, (_, i) => {
+  const h = (i * 137.14 + 8) % 360, l = i % 2 ? 60 : 50;
+  return `hsl(${h.toFixed(0)} 82% ${l}%)`;
+});
+const loteHex = (week) => LOTE_HEX[mod(week, N_LOTES)];
+const loteColor = (week) => new THREE.Color(loteHex(week));
+const WHITE = new THREE.Color('#f3f2ee');
+
+// ---------- medidas de la maqueta (m) ----------
+const K = { STW: 0.8, STL: 2.2, REAR: 1.4, BOAR: 1.5, CROSS: 2.0, WALL: 0.2, WH: 1.15,
+  ALLEY_G: 2.4, CRP: 1.9, CRL: 2.6, RALLEY: 1.3, CORR: 1.8, GAP: 8, WC: 26 };
+
+function buildLayout(d) {
+  const L = {};
+  // ---- Cubrición-control: filas de jaulas cabeza con cabeza, pasillo del verraco entre ellas ----
+  const nSt = d.stalls;
+  const perRow = clamp(Math.ceil(Math.sqrt(nSt * 2.6)), 8, 40);
+  const nRows = Math.ceil(nSt / perRow);
+  let z = K.WALL; const rows = [], boarZ = [], rearZs = []; let lastRear = null;
+  for (let r = 0; r < nRows; r++) {
+    if (r % 2 === 0) {
+      let rearZ;
+      if (lastRear === null) { rearZ = z + K.REAR / 2; z += K.REAR; rearZs.push(rearZ); } else rearZ = lastRear;
+      rows.push({ zc: z + K.STL / 2, dir: 1, rearZ }); z += K.STL;
+      boarZ.push(z + K.BOAR / 2); z += K.BOAR;
+    } else {
+      const row = { zc: z + K.STL / 2, dir: -1 }; z += K.STL;
+      row.rearZ = z + K.REAR / 2; z += K.REAR; rearZs.push(row.rearZ); lastRear = row.rearZ;
+      rows.push(row);
+    }
+  }
+  const cc = { w: K.WALL * 2 + perRow * K.STW + K.CROSS, d: z + K.WALL, perRow, nRows, rows, boarZ, rearZs };
+  cc.x0 = -K.WC / 2 - cc.w; cc.z0 = 0; cc.x1 = -K.WC / 2; cc.z1 = cc.d;
+  cc.crossX = cc.x0 + K.WALL + perRow * K.STW + K.CROSS / 2;
+  cc.doorZ = rearZs[0];
+  cc.stalls = [];
+  for (let i = 0; i < nSt; i++) {
+    const r = Math.floor(i / perRow), c = i % perRow, row = rows[r];
+    cc.stalls.push({ x: cc.x0 + K.WALL + (c + 0.5) * K.STW, z: row.zc, th: row.dir > 0 ? -Math.PI / 2 : Math.PI / 2, rearZ: row.rearZ, row: r });
+  }
+  L.cc = cc;
+
+  // ---- Gestación: 13 corrales en grupo (7 al norte, 3 + paso + 3 al sur) ----
+  const P = d.penCap;
+  const ps = Math.max(3.6, Math.sqrt(P * 2.5));
+  const g = { pw: ps, pd: ps, w: K.WALL * 2 + 7 * ps, d: K.WALL * 2 + 2 * ps + K.ALLEY_G };
+  g.x0 = -g.w / 2; g.z0 = -K.GAP - g.d; g.x1 = g.w / 2; g.z1 = -K.GAP;
+  g.alleyZ = g.z0 + K.WALL + ps + K.ALLEY_G / 2;
+  g.pens = [];
+  for (let i = 0; i < N_PENS; i++) {
+    const north = i < 7; const k = north ? i : (i - 7 < 3 ? i - 7 : i - 6);
+    const x0 = g.x0 + K.WALL + k * ps, z0 = north ? g.z0 + K.WALL : g.z0 + K.WALL + ps + K.ALLEY_G;
+    const gateZ = north ? z0 + ps : z0;
+    g.pens.push({ x0, z0, x1: x0 + ps, z1: z0 + ps, cx: x0 + ps / 2, cz: z0 + ps / 2, gateX: x0 + ps / 2, gateZ, inward: north ? -1 : 1, slots: [] });
+  }
+  const pr = mulberry32(99);
+  const cols = Math.max(1, Math.round(Math.sqrt(P))), rowsN = Math.ceil(P / cols);
+  for (const pen of g.pens) {
+    const m = 0.75, cw = (ps - 2 * m) / cols, chh = (ps - 2 * m) / rowsN;
+    for (let i = 0; i < P; i++) {
+      const c = i % cols, r = Math.floor(i / cols);
+      pen.slots.push({ x: pen.x0 + m + (c + 0.5) * cw + (pr() - 0.5) * cw * 0.35, z: pen.z0 + m + (r + 0.5) * chh + (pr() - 0.5) * chh * 0.35, th: pr() * Math.PI * 2 });
+    }
+  }
+  g.doorX = 0;
+  L.g = g;
+
+  // ---- Maternidad: 6 salas todo dentro / todo fuera ----
+  const R = d.crates, mcols = R > 28 ? 4 : 2, perCol = Math.ceil(R / mcols);
+  const roomW = mcols === 2 ? 2 * K.CRL + K.RALLEY + 0.3 : 4 * K.CRL + 2 * K.RALLEY + 0.5;
+  const roomD = perCol * K.CRP + 0.9;
+  const m = { w: K.WALL * 2 + 6 * roomW + 5 * 0.2, d: K.WALL * 2 + K.CORR + roomD, roomW, roomD, mcols, perCol };
+  m.x0 = K.WC / 2; m.z0 = 0; m.x1 = m.x0 + m.w; m.z1 = m.d;
+  m.corrZ = m.z0 + K.WALL + K.CORR / 2; m.doorZ = m.corrZ;
+  m.rooms = [];
+  for (let r = 0; r < N_ROOMS; r++) {
+    const x0 = m.x0 + K.WALL + r * (roomW + 0.2), z0 = m.z0 + K.WALL + K.CORR;
+    const colsDef = [];
+    if (mcols === 2) {
+      const a = x0 + 0.15 + K.CRL + K.RALLEY / 2;
+      colsDef.push({ x: x0 + 0.15 + K.CRL / 2, face: -1, alley: a }, { x: a + K.RALLEY / 2 + K.CRL / 2, face: 1, alley: a });
+    } else {
+      const a1 = x0 + 0.15 + K.CRL + K.RALLEY / 2;
+      const c1 = a1 + K.RALLEY / 2 + K.CRL / 2;
+      const c2 = c1 + K.CRL / 2 + 0.2 + K.CRL / 2;
+      const a2 = c2 + K.CRL / 2 + K.RALLEY / 2;
+      colsDef.push({ x: x0 + 0.15 + K.CRL / 2, face: -1, alley: a1 }, { x: c1, face: 1, alley: a1 }, { x: c2, face: -1, alley: a2 }, { x: a2 + K.RALLEY / 2 + K.CRL / 2, face: 1, alley: a2 });
+    }
+    const crates = [];
+    for (let k = 0; k < R; k++) {
+      const col = colsDef[Math.floor(k / perCol)], row = k % perCol;
+      const zc = z0 + 0.45 + (row + 0.5) * K.CRP;
+      const bz = col.face < 0 ? 1 : -1;               // lado del vientre (y de la zona de lechones)
+      crates.push({ x: col.x, z: zc - 0.16 * bz, zc, th: col.face < 0 ? Math.PI : 0, alley: col.alley, creepX: col.x - col.face * 0.15, creepZ: zc + 0.56 * bz, bz, face: col.face });
+    }
+    m.rooms.push({ x0, z0, x1: x0 + roomW, z1: z0 + roomD, cx: x0 + roomW / 2, cz: z0 + roomD / 2, crates, colsDef });
+  }
+  L.m = m;
+
+  // ---- patio, caminos y zonas sin plaza ----
+  const xW = -K.WC / 2 + 1.4, xE = K.WC / 2 - 1.4, zN = -K.GAP / 2;
+  const deep = Math.max(cc.d, m.d, 18);
+  L.court = { x0: -K.WC / 2, x1: K.WC / 2, z0: -K.GAP, z1: deep + 3, xW, xE, zN };
+  const padCols = (w) => Math.max(6, Math.floor((w - 1.2) / 1.25));
+  L.ccPad = { x0: cc.x0, x1: cc.x1, z0: cc.z1 + 1.2, cols: padCols(cc.w) };
+  L.mPad = { x0: m.x0, x1: m.x1, z0: m.z1 + 1.2, cols: padCols(m.w) };
+  L.nodes = [
+    [xW, cc.z1 + 2.0],       // 0 junto a la zona sin jaula
+    [xW, cc.doorZ],          // 1 puerta cubrición-control
+    [xW, zN],                // 2 esquina noroeste
+    [g.doorX, zN],           // 3 puerta gestación
+    [xE, zN],                // 4 esquina noreste
+    [xE, m.doorZ],           // 5 puerta maternidad
+    [xE, m.z1 + 2.0],        // 6 junto a la zona sin paridera
+  ];
+  L.ring = { cx: 0, cz: (Math.max(cc.doorZ, m.doorZ) + 2 + L.court.z1) / 2 };
+  L.ring.r = Math.min(K.WC / 2 - 3.2, (L.court.z1 - Math.max(cc.doorZ, m.doorZ) - 2) / 2 - 1.5);
+  const minX = Math.min(cc.x0, g.x0) - 6, maxX = Math.max(m.x1, g.x1) + 6;
+  const minZ = g.z0 - 7, maxZ = Math.max(L.court.z1, cc.z1 + 9, m.z1 + 9) + 5;
+  L.site = { minX, maxX, minZ, maxZ };
+  return L;
+}
+
+const ZONE_NODE = { ccOver: 0, cc: 1, g: 3, m: 5, mOver: 6 };
+function route(a, b) {
+  const out = [];
+  if (a <= b) for (let i = a; i <= b; i++) out.push(i);
+  else { for (let i = a; i >= 5; i--) out.push(i); for (let i = 1; i >= b; i--) out.push(i); }
+  return out;
+}
+function padSlot(pad, i) {
+  const c = i % pad.cols, r = Math.floor(i / pad.cols);
+  return { x: pad.x0 + 1.0 + c * 1.25, z: pad.z0 + 0.9 + r * 1.3, th: Math.PI / 2 };
+}
+// posición de la plaza y recorrido desde la puerta de la nave hasta ella
+function slotInfo(loc) {
+  const L = lay;
+  if (loc.zone === 'cc') {
+    const s = L.cc.stalls[loc.slot], X = L.cc.x1;
+    return { x: s.x, z: s.z, th: s.th, inside: [[X + 0.5, L.cc.doorZ], [L.cc.crossX, L.cc.doorZ], [L.cc.crossX, s.rearZ], [s.x, s.rearZ], [s.x, s.z]] };
+  }
+  if (loc.zone === 'g') {
+    const pen = L.g.pens[loc.pen];
+    const sl = pen.slots[loc.slot] || extraPenSlot(pen, loc.slot);
+    return { x: sl.x, z: sl.z, th: sl.th, inside: [[0, L.g.z1 + 0.5], [0, L.g.z1 - 0.8], [0, L.g.alleyZ], [pen.gateX, L.g.alleyZ], [pen.gateX, pen.gateZ + pen.inward * 0.8], [sl.x, sl.z]] };
+  }
+  if (loc.zone === 'm') {
+    const c = L.m.rooms[loc.room].crates[loc.slot], X = L.m.x0;
+    return { x: c.x, z: c.z, th: c.th, crate: c, inside: [[X - 0.5, L.m.doorZ], [X + 0.9, L.m.doorZ], [c.alley, L.m.doorZ], [c.alley, c.z], [c.x, c.z]] };
+  }
+  if (loc.zone === 'ccOver') {
+    const p = padSlot(L.ccPad, loc.slot);
+    return { x: p.x, z: p.z, th: p.th, inside: [[L.ccPad.x1 - 0.6, L.nodes[0][1]], [p.x, p.z]] };
+  }
+  const p = padSlot(L.mPad, loc.slot);
+  return { x: p.x, z: p.z, th: p.th, inside: [[L.mPad.x0 + 0.6, L.nodes[6][1]], [p.x, p.z]] };
+}
+const extraSlots = new Map();
+function extraPenSlot(pen, i) {
+  const key = pen.cx + ',' + i;
+  if (!extraSlots.has(key)) { const r = mulberry32(i * 31 + Math.round(pen.cx * 10)); extraSlots.set(key, { x: lerp(pen.x0 + 0.6, pen.x1 - 0.6, r()), z: lerp(pen.z0 + 0.6, pen.z1 - 0.6, r()), th: r() * 6.28 }); }
+  return extraSlots.get(key);
+}
+
+// ---------- geometrías ----------
+function colorize(geo, hex) {
+  const c = new THREE.Color(hex), n = geo.attributes.position.count, a = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; }
+  geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return geo;
+}
+const MX = (tx, ty, tz, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) =>
+  new THREE.Matrix4().compose(new THREE.Vector3(tx, ty, tz), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
+const part = (geo, hex, m) => { geo.applyMatrix4(m); geo.deleteAttribute('uv'); return colorize(geo, hex); };
+
+function pigGeometry() {
+  const PINK = '#f0b3aa', SNOUT = '#e7948c', NOSE = '#cf7872', EAR = '#e9a097';
+  return mergeGeometries([
+    part(new THREE.CapsuleGeometry(0.34, 0.78, 6, 16), PINK, MX(0, 0.56, 0, 0, 0, Math.PI / 2, 1, 1.02, 0.9)),
+    part(new THREE.SphereGeometry(0.26, 18, 12), PINK, MX(0.74, 0.62, 0, 0, 0, 0, 1.1, 0.95, 0.92)),
+    part(new THREE.CylinderGeometry(0.115, 0.13, 0.16, 16), SNOUT, MX(0.99, 0.55, 0, 0, 0, Math.PI / 2)),
+    part(new THREE.CylinderGeometry(0.1, 0.1, 0.014, 16), NOSE, MX(1.073, 0.55, 0, 0, 0, Math.PI / 2)),
+    part(new THREE.ConeGeometry(0.11, 0.24, 10), EAR, MX(0.66, 0.84, 0.14, 0.35, 0, -0.75)),
+    part(new THREE.ConeGeometry(0.11, 0.24, 10), EAR, MX(0.66, 0.84, -0.14, -0.35, 0, -0.75)),
+    part(new THREE.SphereGeometry(0.03, 8, 6), '#1b1b1b', MX(0.94, 0.7, 0.115)),
+    part(new THREE.SphereGeometry(0.03, 8, 6), '#1b1b1b', MX(0.94, 0.7, -0.115)),
+    part(new THREE.TorusGeometry(0.055, 0.018, 6, 14, Math.PI * 1.6), PINK, MX(-0.86, 0.66, 0, 0, Math.PI / 2, 0)),
+    part(new THREE.BoxGeometry(0.03, 0.1, 0.08), '#f2c11d', MX(0.66, 0.77, 0.22, 0.3, 0, 0)),
+  ]);
+}
+function legGeometry() {
+  return mergeGeometries([
+    part(new THREE.CylinderGeometry(0.078, 0.066, 0.36, 8), '#f0b3aa', MX(0, -0.18, 0)),
+    part(new THREE.CylinderGeometry(0.068, 0.072, 0.05, 8), '#5b4a45', MX(0, -0.375, 0)),
+  ]);
+}
+function markGeometry() { return part(new THREE.SphereGeometry(1, 18, 8), '#ffffff', MX(-0.06, 0.9, 0, 0, 0, 0, 0.38, 0.055, 0.24)); }
+function pigletGeometry() {
+  const P = '#f6c4bb';
+  return mergeGeometries([
+    part(new THREE.CapsuleGeometry(0.095, 0.2, 4, 10), P, MX(0, 0.13, 0, 0, 0, Math.PI / 2)),
+    part(new THREE.SphereGeometry(0.08, 10, 8), P, MX(0.2, 0.15, 0)),
+    part(new THREE.CylinderGeometry(0.035, 0.04, 0.05, 8), '#e99a92', MX(0.28, 0.14, 0, 0, 0, Math.PI / 2)),
+    part(new THREE.ConeGeometry(0.035, 0.07, 6), '#eba59c', MX(0.19, 0.23, 0.045, 0.3, 0, -0.6)),
+    part(new THREE.ConeGeometry(0.035, 0.07, 6), '#eba59c', MX(0.19, 0.23, -0.045, -0.3, 0, -0.6)),
+    part(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 6), P, MX(0.1, 0.04, 0.05)),
+    part(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 6), P, MX(0.1, 0.04, -0.05)),
+    part(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 6), P, MX(-0.1, 0.04, 0.05)),
+    part(new THREE.CylinderGeometry(0.025, 0.025, 0.08, 6), P, MX(-0.1, 0.04, -0.05)),
+  ]);
+}
+
+// matriz de un cerdo: T(p)·Ry(th)·S·T(0,yc,0)·Rx(roll)·T(0,-cy,0)
+function setPig(a, o, px, pz, th, roll, yc, s, cy) {
+  const ct = Math.cos(th), st = Math.sin(th), cr = Math.cos(roll), sr = Math.sin(roll);
+  const l00 = ct * s, l01 = st * sr * s, l02 = st * cr * s;
+  const l11 = cr * s, l12 = -sr * s;
+  const l20 = -st * s, l21 = ct * sr * s, l22 = ct * cr * s;
+  a[o] = l00; a[o + 1] = 0; a[o + 2] = l20; a[o + 3] = 0;
+  a[o + 4] = l01; a[o + 5] = l11; a[o + 6] = l21; a[o + 7] = 0;
+  a[o + 8] = l02; a[o + 9] = l12; a[o + 10] = l22; a[o + 11] = 0;
+  a[o + 12] = px - l01 * cy; a[o + 13] = s * yc - l11 * cy; a[o + 14] = pz - l21 * cy; a[o + 15] = 1;
+}
+// pata: M_cerdo · T(h) · Rz(phi) · S(1, ls, 1)
+function setLeg(a, o, b, bo, hx, hy, hz, phi, ls) {
+  const c = Math.cos(phi), s = Math.sin(phi);
+  const c0x = b[bo], c0y = b[bo + 1], c0z = b[bo + 2], c1x = b[bo + 4], c1y = b[bo + 5], c1z = b[bo + 6];
+  a[o] = c * c0x + s * c1x; a[o + 1] = c * c0y + s * c1y; a[o + 2] = c * c0z + s * c1z; a[o + 3] = 0;
+  a[o + 4] = ls * (-s * c0x + c * c1x); a[o + 5] = ls * (-s * c0y + c * c1y); a[o + 6] = ls * (-s * c0z + c * c1z); a[o + 7] = 0;
+  a[o + 8] = b[bo + 8]; a[o + 9] = b[bo + 9]; a[o + 10] = b[bo + 10]; a[o + 11] = 0;
+  a[o + 12] = b[bo + 12] + c0x * hx + c1x * hy + b[bo + 8] * hz;
+  a[o + 13] = b[bo + 13] + c0y * hx + c1y * hy + b[bo + 9] * hz;
+  a[o + 14] = b[bo + 14] + c0z * hx + c1z * hy + b[bo + 10] * hz;
+  a[o + 15] = 1;
+}
+const HIPS = [[0.42, 0.38, 0.17, 0], [0.42, 0.38, -0.17, Math.PI], [-0.46, 0.38, 0.17, Math.PI], [-0.46, 0.38, -0.17, 0]];
+
+// ---------- renderer, cámara, luces ----------
+const stage = $('stage');
+let renderer, scene, camera, controls, labelRenderer, hemi, sun, bgTex;
+const PH_COL = { gest: new THREE.Color('#0f8a6a'), clean: '#0f7ea3', gold: new THREE.Color('#ffd23f') };
+const mats = {};
+function initRenderer() {
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  stage.prepend(renderer.domElement);
+  labelRenderer = new CSS2DRenderer({ element: $('labels') });
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(42, 1, 0.5, 900);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = 1.36; controls.minDistance = 5;
+  controls.autoRotateSpeed = 0.5; controls.screenSpacePanning = false;
+  hemi = new THREE.HemisphereLight(0xdfefff, 0x6b5a45, 0.9); scene.add(hemi);
+  sun = new THREE.DirectionalLight(0xfff1d8, 2.4); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+  scene.add(sun); scene.add(sun.target);
+  const std = (hex, o = {}) => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.85, metalness: 0, ...o });
+  Object.assign(mats, {
+    pig: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62 }),
+    mark: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45 }),
+    concrete: std('#d7dad5'), slat: std('#8f9590'), wall: std('#f1f1ec'), trim: std('#2f6e5f'),
+    metal: std('#b7c1c7', { metalness: 0.65, roughness: 0.32 }), frame: std('#2f6e5f', { roughness: 0.6 }),
+    trough: std('#9aa29c'), penFloor: std('#dccfa9'), creep: std('#5f7f96'),
+    grass: std('#86b35e'), soil: std('#6a4a33'), rock: std('#3a302b'), picon: std('#8a5646'), road: std('#c6c0b4'),
+    paint: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }),
+    pad: std('#f2d9d4'), padEdge: std('#c62f2f'),
+    lamp: new THREE.MeshStandardMaterial({ color: '#40302a', emissive: '#ff5a1c', emissiveIntensity: 1.6, roughness: 0.4 }),
+    trunk: std('#7a5a3e'), pine: std('#2f6b3f'), palm: std('#4f8a3a'), silo: std('#c9d0d4', { metalness: 0.7, roughness: 0.3 }),
+  });
+  window.addEventListener('resize', resize);
+  new ResizeObserver(resize).observe(stage);
+  resize();
+}
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  if (!w || !h || !renderer) return;
+  renderer.setSize(w, h, false); renderer.domElement.style.width = w + 'px'; renderer.domElement.style.height = h + 'px';
+  labelRenderer.setSize(w, h);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+function applyTheme() {
+  const s1 = cssVar('--sky1') || '#8ec6ec', s2 = cssVar('--sky2') || '#eaf3f1', k = parseFloat(cssVar('--sun')) || 1;
+  const c = document.createElement('canvas'); c.width = 4; c.height = 256;
+  const x = c.getContext('2d'), gr = x.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, s1); gr.addColorStop(1, s2); x.fillStyle = gr; x.fillRect(0, 0, 4, 256);
+  if (bgTex) bgTex.dispose();
+  bgTex = new THREE.CanvasTexture(c); bgTex.colorSpace = THREE.SRGBColorSpace; scene.background = bgTex;
+  if (scene.fog) scene.fog.color.set(cssVar('--fog') || '#dfeaea');
+  PH_COL.gest.set(cssVar('--gest') || '#0f8a6a'); PH_COL.clean = cssVar('--clean') || '#0f7ea3';
+  sun.intensity = 2.5 * k; hemi.intensity = 0.55 + 0.45 * k;
+  sun.color.set(k < 0.7 ? '#c9d6ff' : '#fff1d8');
+  mats.lamp.emissiveIntensity = k < 0.7 ? 2.6 : 1.6;
+  if (world) world.glow.material.opacity = k < 0.7 ? 1 : 0.75;
+}
+
+// ---------- mundo (se reconstruye al cambiar el número de cerdas) ----------
+let farm, lay, world, vs = [];
+let simDay = 0;
+
+class Boxes {   // colector de cajas instanciadas por material
+  constructor() { this.list = []; }
+  add(w, h, d, x, y, z, ry = 0, rz = 0) { this.list.push(MX(x, y, z, 0, ry, rz, w, h, d)); }
+  build(mat, group, cast = true) {
+    if (!this.list.length) return null;
+    const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mat, this.list.length);
+    this.list.forEach((mx, i) => m.setMatrixAt(i, mx));
+    m.castShadow = cast; m.receiveShadow = true; group.add(m); return m;
+  }
+}
+function flat(group, mat, x0, z0, x1, z1, y = 0.01, h = 0.04, cast = false) {
+  const me = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), mat);
+  me.position.set((x0 + x1) / 2, y + h / 2 - 0.02, (z0 + z1) / 2); me.receiveShadow = true; me.castShadow = cast; group.add(me); return me;
+}
+// muro rectangular con huecos: holes = [{side:'N'|'S'|'E'|'W', at, w}]
+function walls(B, x0, z0, x1, z1, holes = [], h = K.WH, t = K.WALL) {
+  const side = (s, a0, a1, fixed) => {
+    const hs = holes.filter((q) => q.side === s).map((q) => [q.at - q.w / 2, q.at + q.w / 2]).sort((p, q) => p[0] - q[0]);
+    let cur = a0; const segs = [];
+    for (const [h0, h1] of hs) { if (h0 > cur) segs.push([cur, h0]); cur = Math.max(cur, h1); }
+    if (cur < a1) segs.push([cur, a1]);
+    for (const [s0, s1] of segs) {
+      if (s === 'N' || s === 'S') B.add(s1 - s0, h, t, (s0 + s1) / 2, h / 2, fixed);
+      else B.add(t, h, s1 - s0, fixed, h / 2, (s0 + s1) / 2);
+    }
+  };
+  side('N', x0, x1, z0 + t / 2); side('S', x0, x1, z1 - t / 2); side('W', z0, z1, x0 + t / 2); side('E', z0, z1, x1 - t / 2);
+}
+function frames(B, x0, z0, x1, z1) {   // pórticos de acero, repetidos a lo largo del lado largo
+  const alongX = (x1 - x0) >= (z1 - z0);
+  const len = alongX ? x1 - x0 : z1 - z0, span = alongX ? z1 - z0 : x1 - x0;
+  const n = Math.max(2, Math.round(len / 5.5));
+  const H = 3.2, rise = Math.min(2.2, span * 0.12), raf = Math.hypot(span / 2, rise), ang = Math.atan2(rise, span / 2);
+  for (let i = 0; i <= n; i++) {
+    const a = (alongX ? x0 : z0) + 0.15 + i * (len - 0.3) / n;
+    if (alongX) {
+      B.add(0.16, H, 0.16, a, H / 2, z0 + 0.08); B.add(0.16, H, 0.16, a, H / 2, z1 - 0.08);
+      B.list.push(MX(a, H + rise / 2, z0 + span / 4, ang, 0, 0, 0.14, 0.18, raf));
+      B.list.push(MX(a, H + rise / 2, z1 - span / 4, -ang, 0, 0, 0.14, 0.18, raf));
+    } else {
+      B.add(0.16, H, 0.16, x0 + 0.08, H / 2, a); B.add(0.16, H, 0.16, x1 - 0.08, H / 2, a);
+      B.list.push(MX(x0 + span / 4, H + rise / 2, a, 0, 0, ang, raf, 0.18, 0.14));
+      B.list.push(MX(x1 - span / 4, H + rise / 2, a, 0, 0, -ang, raf, 0.18, 0.14));
+    }
+  }
+  if (alongX) B.add(len, 0.16, 0.16, (x0 + x1) / 2, H + rise, (z0 + z1) / 2); else B.add(0.16, 0.16, len, (x0 + x1) / 2, H + rise, (z0 + z1) / 2);
+}
+function label(group, html, cls, x, y, z, list) {
+  const el = document.createElement('div'); el.className = 'lbl ' + (cls || ''); el.innerHTML = html;
+  const o = new CSS2DObject(el); o.position.set(x, y, z); group.add(o); list.push(el); return el;
+}
+
+function buildWorld(L, d) {
+  const G = new THREE.Group(); const W = { group: G, labels: [], roomFloors: [], sprays: [] };
+  const Bwall = new Boxes(), Btrim = new Boxes(), Bmetal = new Boxes(), Bframe = new Boxes(), Btrough = new Boxes(), Bslat = new Boxes(), Bcreep = new Boxes(), Bpaint = new Boxes(), Bpad = new Boxes(), Bdark = new Boxes();
+  const S = L.site;
+  // base de la maqueta: césped, tierra y basalto
+  const bw = S.maxX - S.minX, bd = S.maxZ - S.minZ, bx = (S.minX + S.maxX) / 2, bz = (S.minZ + S.maxZ) / 2;
+  const base = (mat, w, h, dd, y) => { const me = new THREE.Mesh(new THREE.BoxGeometry(w, h, dd), mat); me.position.set(bx, y, bz); me.receiveShadow = true; G.add(me); };
+  base(mats.grass, bw, 0.4, bd, -0.2); base(mats.soil, bw - 0.4, 1.4, bd - 0.4, -1.1); base(mats.rock, bw - 1.2, 2.2, bd - 1.2, -2.9);
+  // patio de picón y caminos
+  const C = L.court;
+  flat(G, mats.picon, C.x0, C.z0, C.x1, C.z1, 0.005, 0.03);
+  const road = (x0, z0, x1, z1) => flat(G, mats.road, Math.min(x0, x1) - 1.2, Math.min(z0, z1) - 1.2, Math.max(x0, x1) + 1.2, Math.max(z0, z1) + 1.2, 0.02, 0.04);
+  const N = L.nodes;
+  road(N[2][0], N[2][1], N[4][0], N[4][1]);           // norte
+  road(N[0][0], N[0][1], N[2][0], N[2][1]);           // oeste
+  road(N[4][0], N[4][1], N[6][0], N[6][1]);           // este
+  road(N[1][0], N[1][1], N[5][0], N[5][1] + 0.2);     // paso del destete
+  road(N[3][0], N[3][1], N[3][0], L.g.z1);            // entrada gestación
+  road(N[0][0], N[0][1], L.ccPad.x1 - 0.4, N[0][1]); road(N[6][0], N[6][1], L.mPad.x0 + 0.4, N[6][1]);
+  // flechas de sentido de circulación
+  const arrowGeo = new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(0.55, 0), new THREE.Vector2(-0.35, 0.42), new THREE.Vector2(-0.15, 0), new THREE.Vector2(-0.35, -0.42)]));
+  arrowGeo.rotateX(-Math.PI / 2);
+  const arrows = [];
+  const lane = (pts) => { for (let i = 0; i < pts.length - 1; i++) { const [ax, az] = pts[i], [bx2, bz2] = pts[i + 1]; const len = Math.hypot(bx2 - ax, bz2 - az); const th = Math.atan2(-(bz2 - az), bx2 - ax); for (let t = 2.5; t < len - 1.5; t += 4.5) arrows.push(MX(ax + (bx2 - ax) * t / len, 0.065, az + (bz2 - az) * t / len, 0, th, 0)); } };
+  lane([N[1], N[2], N[3]]); lane([N[3], N[4], N[5]]); lane([N[5], N[1]]);
+  const am = new THREE.InstancedMesh(arrowGeo, mats.paint, arrows.length); arrows.forEach((m, i) => am.setMatrixAt(i, m)); G.add(am);
+
+  // ---- nave de cubrición-control ----
+  const cc = L.cc;
+  flat(G, mats.concrete, cc.x0, cc.z0, cc.x1, cc.z1, 0.02, 0.06);
+  walls(Bwall, cc.x0, cc.z0, cc.x1, cc.z1, [{ side: 'E', at: cc.doorZ, w: 1.8 }]);
+  Btrim.add(cc.w, 0.12, 0.26, (cc.x0 + cc.x1) / 2, K.WH + 0.06, cc.z0 + 0.1); Btrim.add(cc.w, 0.12, 0.26, (cc.x0 + cc.x1) / 2, K.WH + 0.06, cc.z1 - 0.1);
+  for (const row of cc.rows) {
+    const x0 = cc.x0 + K.WALL, x1 = x0 + cc.perRow * K.STW, zc = row.zc;
+    for (let i = 0; i <= cc.perRow; i++) Bmetal.add(0.05, 1.0, K.STL - 0.2, x0 + i * K.STW, 0.5, zc);
+    Btrough.add(x1 - x0, 0.3, 0.34, (x0 + x1) / 2, 0.15, zc + row.dir * (K.STL / 2 - 0.2));
+    Bslat.add(x1 - x0, 0.02, 0.8, (x0 + x1) / 2, 0.06, zc - row.dir * (K.STL / 2 - 0.4));
+  }
+  frames(Bframe, cc.x0, cc.z0, cc.x1, cc.z1);
+  // ---- nave de gestación ----
+  const g = L.g;
+  flat(G, mats.concrete, g.x0, g.z0, g.x1, g.z1, 0.02, 0.06);
+  walls(Bwall, g.x0, g.z0, g.x1, g.z1, [{ side: 'S', at: 0, w: 2.2 }]);
+  Btrim.add(g.w, 0.12, 0.26, 0, K.WH + 0.06, g.z0 + 0.1); Btrim.add(g.w, 0.12, 0.26, 0, K.WH + 0.06, g.z1 - 0.1);
+  for (const pen of g.pens) {
+    flat(G, mats.penFloor, pen.x0 + 0.06, pen.z0 + 0.06, pen.x1 - 0.06, pen.z1 - 0.06, 0.06, 0.03);
+    const back = pen.inward < 0 ? pen.z0 + 0.35 : pen.z1 - 0.35;
+    Btrough.add(g.pw * 0.7, 0.3, 0.4, pen.cx, 0.2, back);
+    // muro del lado del pasillo con puerta metálica
+    const gw = 1.6, zg = pen.gateZ;
+    Bwall.add((g.pw - gw) / 2, 0.95, 0.12, pen.x0 + (g.pw - gw) / 4, 0.475, zg); Bwall.add((g.pw - gw) / 2, 0.95, 0.12, pen.x1 - (g.pw - gw) / 4, 0.475, zg);
+    for (let k = 0; k < 5; k++) Bmetal.add(gw, 0.05, 0.05, pen.gateX, 0.18 + k * 0.19, zg);
+  }
+  const zN0 = g.z0 + K.WALL, zN1 = zN0 + g.pw, zS0 = zN1 + K.ALLEY_G, zS1 = zS0 + g.pw;
+  for (let k = 1; k < 7; k++) Bwall.add(0.12, 0.95, g.pw, g.x0 + K.WALL + k * g.pw, 0.475, (zN0 + zN1) / 2);
+  for (const k of [1, 2, 3, 4, 5, 6]) Bwall.add(0.12, 0.95, g.pw, g.x0 + K.WALL + k * g.pw, 0.475, (zS0 + zS1) / 2);
+  // bloque central sur: paso y almacenes
+  const bx0 = g.x0 + K.WALL + 3 * g.pw, bx1 = bx0 + g.pw;
+  const store = (x0, x1) => { const me = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 2.2, g.pw - 0.2), mats.wall); me.position.set((x0 + x1) / 2, 1.1, (zS0 + zS1) / 2); me.castShadow = me.receiveShadow = true; G.add(me); Btrim.add(x1 - x0 + 0.1, 0.12, g.pw - 0.05, (x0 + x1) / 2, 2.26, (zS0 + zS1) / 2); };
+  store(bx0 + 0.1, -1.3); store(1.3, bx1 - 0.1);
+  frames(Bframe, g.x0, g.z0, g.x1, g.z1);
+  // ---- nave de maternidad ----
+  const m = L.m;
+  flat(G, mats.concrete, m.x0, m.z0, m.x1, m.z1, 0.02, 0.06);
+  walls(Bwall, m.x0, m.z0, m.x1, m.z1, [{ side: 'W', at: m.doorZ, w: 1.6 }]);
+  Btrim.add(m.w, 0.12, 0.26, (m.x0 + m.x1) / 2, K.WH + 0.06, m.z0 + 0.1); Btrim.add(m.w, 0.12, 0.26, (m.x0 + m.x1) / 2, K.WH + 0.06, m.z1 - 0.1);
+  const lampPts = [];
+  m.rooms.forEach((room, r) => {
+    const fm = new THREE.MeshStandardMaterial({ color: '#cfd6d8', roughness: 0.55, metalness: 0.05 });
+    W.roomFloors.push(flat(G, fm, room.x0, room.z0, room.x1, room.z1, 0.06, 0.03));
+    // tabique frontal con puertas a los pasillos de la sala
+    const alleys = [...new Set(room.colsDef.map((c) => c.alley))].sort((p, q) => p - q);
+    let cx0 = room.x0 - 0.1;
+    for (const al of alleys) { if (al - 0.6 > cx0) Bwall.add(al - 0.6 - cx0, K.WH, 0.12, (cx0 + al - 0.6) / 2, K.WH / 2, room.z0 - 0.06); cx0 = al + 0.6; }
+    Bwall.add(room.x1 + 0.1 - cx0, K.WH, 0.12, (cx0 + room.x1 + 0.1) / 2, K.WH / 2, room.z0 - 0.06);
+    if (r < N_ROOMS - 1) Bwall.add(0.12, K.WH, m.z1 - K.WALL - room.z0, room.x1 + 0.1, K.WH / 2, (room.z0 + m.z1 - K.WALL) / 2);
+    for (const c of room.crates) {
+      const len = K.CRL - 0.5;
+      Bmetal.add(len, 0.05, 0.05, c.x, 0.85, c.z + 0.34); Bmetal.add(len, 0.05, 0.05, c.x, 0.85, c.z - 0.34);
+      Bmetal.add(len, 0.05, 0.05, c.x, 0.45, c.z + 0.34); Bmetal.add(len, 0.05, 0.05, c.x, 0.45, c.z - 0.34);
+      for (const dx of [-len / 2, 0, len / 2]) { Bmetal.add(0.05, 0.85, 0.05, c.x + dx, 0.425, c.z + 0.34); Bmetal.add(0.05, 0.85, 0.05, c.x + dx, 0.425, c.z - 0.34); }
+      Bdark.add(K.CRL - 0.1, 0.5, 0.05, c.x, 0.25, c.zc - K.CRP / 2);
+      Bcreep.add(1.1, 0.03, 0.62, c.creepX, 0.08, c.creepZ);
+      Btrough.add(0.3, 0.28, 0.4, c.x - c.face * (K.CRL / 2 - 0.2), 0.14, c.z);
+      lampPts.push(c.creepX, 1.15, c.creepZ);
+    }
+    // agua del lavado (vacío sanitario)
+    const n = 90, pos = new Float32Array(n * 3), seed = [];
+    for (let i = 0; i < n; i++) { seed.push(Math.random()); pos[i * 3] = lerp(room.x0 + 0.3, room.x1 - 0.3, Math.random()); pos[i * 3 + 1] = Math.random() * 1.4; pos[i * 3 + 2] = lerp(room.z0 + 0.3, room.z1 - 0.3, Math.random()); }
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: '#8fdcf5', size: 0.12, transparent: true, opacity: 0.85, depthWrite: false }));
+    pts.visible = false; G.add(pts); W.sprays.push({ pts, room, seed });
+  });
+  frames(Bframe, m.x0, m.z0, m.x1, m.z1);
+  // lámparas de calor: pantalla + resplandor
+  const lampGeo = new THREE.ConeGeometry(0.16, 0.18, 12, 1, true);
+  const lampMesh = new THREE.InstancedMesh(lampGeo, mats.lamp, lampPts.length / 3);
+  for (let i = 0; i < lampPts.length / 3; i++) lampMesh.setMatrixAt(i, MX(lampPts[i * 3], lampPts[i * 3 + 1] + 0.1, lampPts[i * 3 + 2]));
+  G.add(lampMesh);
+  const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(lampPts), 3));
+  gg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(lampPts.length), 3));
+  W.glow = new THREE.Points(gg, new THREE.PointsMaterial({ size: 1.1, map: glowTexture(), vertexColors: true, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  G.add(W.glow);
+
+  // ---- zonas sin plaza ----
+  const pad = (P, rows) => {
+    const x1 = P.x0 + 1.0 + (P.cols - 1) * 1.25 + 0.6, z1 = P.z0 + 0.3 + rows * 1.3;
+    flat(G, mats.pad, P.x0 + 0.3, P.z0, x1, z1, 0.02, 0.04);
+    Bpad.add(x1 - P.x0 - 0.3, 0.08, 0.08, (P.x0 + 0.3 + x1) / 2, 0.08, P.z0); Bpad.add(x1 - P.x0 - 0.3, 0.08, 0.08, (P.x0 + 0.3 + x1) / 2, 0.08, z1);
+    Bpad.add(0.08, 0.08, z1 - P.z0, P.x0 + 0.3, 0.08, (P.z0 + z1) / 2); Bpad.add(0.08, 0.08, z1 - P.z0, x1, 0.08, (P.z0 + z1) / 2);
+    return { x: (P.x0 + x1) / 2, z: z1 };
+  };
+  const ccPadC = pad(L.ccPad, 3), mPadC = pad(L.mPad, 3);
+
+  // ---- silos de pienso y árboles ----
+  const silos = [];
+  silos.push([cc.x0 - 2.2, cc.z0 + 3], [cc.x0 - 2.2, cc.z0 + 6.2]);
+  silos.push([g.x0 + 6, g.z0 - 2.4], [g.x0 + 9.2, g.z0 - 2.4], [g.x1 - 7, g.z0 - 2.4]);
+  silos.push([m.x1 + 2.2, m.z0 + 3], [m.x1 + 2.2, m.z0 + 6.2]);
+  for (const [x, z] of silos) {
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 3.4, 24), mats.silo); body.position.set(x, 3.6, z);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.8, 24), mats.silo); top.position.set(x, 5.7, z);
+    const bot = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.3, 24), mats.silo); bot.rotation.x = Math.PI; bot.position.set(x, 1.25, z);
+    for (const o of [body, top, bot]) { o.castShadow = true; G.add(o); }
+    for (const [dx, dz] of [[0.8, 0.8], [-0.8, 0.8], [0.8, -0.8], [-0.8, -0.8]]) Bdark.add(0.1, 1.9, 0.1, x + dx, 0.95, z + dz);
+  }
+  const Btrunk = [], Bpine = [], Bpalm = [];
+  const tr = mulberry32(4242);
+  const inside = (x, z) => (x > S.minX + 1 && x < S.maxX - 1 && z > S.minZ + 1 && z < S.maxZ - 1) && !(x > S.minX + 4 && x < S.maxX - 4 && z > S.minZ + 4 && z < S.maxZ - 3.5);
+  for (let i = 0; i < 400 && Btrunk.length < 70; i++) {
+    const x = lerp(S.minX + 1.2, S.maxX - 1.2, tr()), z = lerp(S.minZ + 1.2, S.maxZ - 1.2, tr());
+    if (!inside(x, z)) continue;
+    const palm = tr() < 0.35, s = 0.8 + tr() * 0.5;
+    if (palm) {
+      Btrunk.push(MX(x, 2.2 * s, z, 0, 0, (tr() - 0.5) * 0.15, 0.22 * s, 4.4 * s, 0.22 * s));
+      for (let f = 0; f < 7; f++) { const a = f / 7 * Math.PI * 2 + tr(); Bpalm.push(MX(x + Math.cos(a) * 0.9 * s, 4.3 * s, z + Math.sin(a) * 0.9 * s, 0, -a, -0.45, 1.9 * s, 0.06, 0.45 * s)); }
+    } else {
+      Btrunk.push(MX(x, 0.7 * s, z, 0, 0, 0, 0.25 * s, 1.4 * s, 0.25 * s));
+      Bpine.push(MX(x, 2.2 * s, z, 0, tr() * 3, 0, 1.4 * s, 2.4 * s, 1.4 * s), MX(x, 3.4 * s, z, 0, tr() * 3, 0, 1.0 * s, 1.8 * s, 1.0 * s));
+    }
+  }
+  const inst = (geo, mat, list) => { if (!list.length) return; const me = new THREE.InstancedMesh(geo, mat, list.length); list.forEach((mx, i) => me.setMatrixAt(i, mx)); me.castShadow = true; G.add(me); };
+  inst(new THREE.CylinderGeometry(0.5, 0.6, 1, 7), mats.trunk, Btrunk);
+  inst(new THREE.ConeGeometry(1, 1, 7), mats.pine, Bpine);
+  inst(new THREE.BoxGeometry(1, 1, 1), mats.palm, Bpalm);
+
+  Bwall.build(mats.wall, G); Btrim.build(mats.trim, G); Bmetal.build(mats.metal, G); Bframe.build(mats.frame, G);
+  Btrough.build(mats.trough, G); Bslat.build(mats.slat, G, false); Bcreep.build(mats.creep, G, false); Bpad.build(mats.padEdge, G, false); Bdark.build(mats.slat, G);
+
+  // ---- rueda del ciclo en el patio ----
+  W.ring = new THREE.Group(); G.add(W.ring);
+  // ---- etiquetas ----
+  const LB = W.labels;
+  W.lCC = label(G, '', 'bld', (cc.x0 + cc.x1) / 2, 5.4, cc.z0 + 1, LB); W.lCC.style.borderLeftColor = 'var(--cc)';
+  W.lG = label(G, '', 'bld', 0, 5.8, g.z0 + 1, LB); W.lG.style.borderLeftColor = 'var(--gest)';
+  W.lM = label(G, '', 'bld', (m.x0 + m.x1) / 2, 5.4, m.z0 + 1, LB); W.lM.style.borderLeftColor = 'var(--mat)';
+  W.lRooms = m.rooms.map((room) => label(G, '', 'sm', room.cx, 1.9, room.z0 + 1.2, LB));
+  W.lPens = g.pens.map((pen) => label(G, '', 'sm', pen.cx, 1.5, pen.cz, LB));
+  W.lCcOver = label(G, '', 'crit', ccPadC.x, 1.4, ccPadC.z + 0.4, LB);
+  W.lMOver = label(G, '', 'crit', mPadC.x, 1.4, mPadC.z + 0.4, LB);
+  W.ringLabels = [label(G, '', 'ring', 0, 0.3, 0, LB), label(G, '', 'ring', 0, 0.3, 0, LB), label(G, '', 'ring', 0, 0.3, 0, LB), label(G, '', 'ring center', L.ring.cx, 0.3, L.ring.cz, LB)];
+
+  // ---- cerdas, patas, marcas, lechones, verraco ----
+  const NS = farm.N;
+  W.body = new THREE.InstancedMesh(pigGeometry(), mats.pig, NS + 1);
+  W.legs = new THREE.InstancedMesh(legGeometry(), mats.pig, (NS + 1) * 4);
+  W.marks = new THREE.InstancedMesh(markGeometry(), mats.mark, NS);
+  W.piglets = new THREE.InstancedMesh(pigletGeometry(), mats.pig, Math.ceil(NS * 0.34) * 12 + 60);
+  for (const me of [W.body, W.legs, W.marks, W.piglets]) { me.position.y = 0.065; me.frustumCulled = false; me.castShadow = true; me.receiveShadow = true; me.instanceMatrix.setUsage(THREE.DynamicDrawUsage); G.add(me); }
+  W.legs.castShadow = false; W.piglets.castShadow = false;
+  const tint = new THREE.Color(), tr2 = mulberry32(17);
+  for (let i = 0; i < NS; i++) { const k = 0.93 + tr2() * 0.09; W.body.setColorAt(i, tint.setRGB(k, k * (0.97 + tr2() * 0.04), k * (0.96 + tr2() * 0.05))); }
+  W.body.setColorAt(NS, tint.set('#9a4f2c')); W.body.instanceColor.needsUpdate = true;
+  for (let i = 0; i < NS * 4 + 4; i++) W.legs.setColorAt(i, tint.setScalar(i >= NS * 4 ? 0.55 : 1));
+  W.legs.instanceColor.needsUpdate = true;
+  W.boarPath = [];
+  for (let k = 0; k < cc.boarZ.length; k++) { const bzz = cc.boarZ[k]; W.boarPath.push([cc.crossX, bzz], [cc.x0 + K.WALL + 0.6, bzz], [cc.crossX, bzz]); }
+  W.boar = { x: W.boarPath[0][0], z: W.boarPath[0][1], th: Math.PI, i: 0, gait: 0 };
+  // selección y pulsos
+  W.sel = new THREE.Group();
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 18), new THREE.MeshStandardMaterial({ color: '#f2c11d', emissive: '#6b5200', roughness: 0.4 }));
+  cone.rotation.x = Math.PI; cone.position.y = 2.2; W.sel.add(cone);
+  const ringSel = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.05, 40), new THREE.MeshBasicMaterial({ color: '#f2c11d', transparent: true, opacity: 0.9, depthWrite: false }));
+  ringSel.rotation.x = -Math.PI / 2; ringSel.position.y = 0.09; W.sel.add(ringSel);
+  W.sel.visible = false; G.add(W.sel);
+  W.pulses = [];
+  const pgeo = new THREE.RingGeometry(0.62, 0.8, 36); pgeo.rotateX(-Math.PI / 2);
+  for (let i = 0; i < 70; i++) { const me = new THREE.Mesh(pgeo, new THREE.MeshBasicMaterial({ color: '#fff', transparent: true, opacity: 0, depthWrite: false })); me.visible = false; me.renderOrder = 3; G.add(me); W.pulses.push({ me, life: 0 }); }
+
+  // luz solar ajustada a la maqueta
+  const span = Math.max(bw, bd);
+  sun.position.set(bx - span * 0.35, span * 0.75, bz - span * 0.45); sun.target.position.set(bx, 0, bz);
+  const sc = sun.shadow.camera; sc.left = -span * 0.72; sc.right = span * 0.72; sc.top = span * 0.72; sc.bottom = -span * 0.72; sc.near = 1; sc.far = span * 2.4; sc.updateProjectionMatrix();
+  controls.maxDistance = span * 2.2;
+  scene.fog = new THREE.Fog(cssVar('--fog') || '#dfeaea', span * 1.7, span * 4.5);
+  scene.add(G);
+  return W;
+}
+function glowTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c); return t;
+}
+function disposeWorld() {
+  if (!world) return;
+  scene.remove(world.group);
+  world.group.traverse((o) => { if (o.isInstancedMesh) o.dispose(); if (o.geometry) o.geometry.dispose(); if (o.material && !Object.values(mats).includes(o.material)) { if (o.material.map && o.material.map !== bgTex) o.material.map.dispose(); o.material.dispose(); } });
+  for (const el of world.labels) el.remove();
+  world = null; extraSlots.clear();
+}
+
+// rueda del ciclo: arcos proporcionales a los días de cada fase
+function buildRing() {
+  const R = lay.ring, th = theory(N, IDC), grp = world.ring;
+  while (grp.children.length) { const c = grp.children.pop(); c.geometry.dispose(); c.material.dispose(); }
+  const segs = [['--cc', th.cc.days, 'Cubrición-control'], ['--gest', th.g.days, 'Gestación'], ['--mat', th.m.days, 'Maternidad']];
+  let a = Math.PI / 2;
+  segs.forEach(([v, days, name], i) => {
+    const len = days / th.iep * Math.PI * 2;
+    const geo = new THREE.RingGeometry(R.r * 0.62, R.r, 72, 1, a - len + 0.02, len - 0.04); geo.rotateX(-Math.PI / 2);
+    const me = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: cssVar(v), roughness: 0.7 })); me.position.set(R.cx, 0.07, R.cz); me.receiveShadow = true; grp.add(me);
+    const mid = a - len / 2, rr = R.r * 0.81;
+    const el = world.ringLabels[i]; el.innerHTML = `${name}<small>${days} d · ${fmt(days / 7, 1)} lotes</small>`;
+    const obj = world.group.children.find((o) => o.element === el); if (obj) obj.position.set(R.cx + Math.cos(mid) * rr, 0.3, R.cz - Math.sin(mid) * rr);
+    a -= len;
+  });
+  world.ringLabels[3].innerHTML = `Ciclo ${th.iep} d<small>${fmt(th.iep / 7, 1)} semanas entre partos</small>`;
+}
+
+// ---------- estado visual de cada cerda ----------
+function initSows() {
+  vs = farm.sows.map((s) => {
+    const info = slotInfo({ zone: s.zone, slot: s.slot, room: s.room, pen: s.pen });
+    const r = mulberry32(s.id * 13 + 5);
+    return { x: info.x, z: info.z, th: info.th, sx: info.x, sz: info.z, sth: info.th, roll: 0, yc: 0.56, ls: 1, gait: r() * 6, walking: false, path: null, seg: 0, segT: 0, spd: 0.85 + r() * 0.3,
+      delay: 0, lane: (r() - 0.5) * 1.3, wx: info.x, wz: info.z, idle: r() * 5, lie: false, phaseOff: r() * 40, farrowAt: s.phase === 'lactante' ? s.farrow + 0.5 : -1,
+      mark: (s.f & 1) ? loteColor(s.week) : WHITE.clone(), rnd: r };
+  });
+  vs.forEach((v, i) => world.marks.setColorAt(i, v.mark)); world.marks.instanceColor.needsUpdate = true;
+}
+function startWalk(i, from, to) {
+  const v = vs[i], dst = slotInfo(to);
+  const pts = [[v.x, v.z]];
+  if (!v.walking && from && from.zone) { const src = slotInfo(from); for (let k = src.inside.length - 2; k >= 0; k--) pts.push(src.inside[k]); }
+  if (from && from.zone) for (const n of route(ZONE_NODE[from.zone], ZONE_NODE[to.zone])) pts.push([lay.nodes[n][0] + v.lane, lay.nodes[n][1] + v.lane]);
+  for (const p of dst.inside) pts.push(p);
+  const clean = [pts[0]];
+  for (let k = 1; k < pts.length; k++) { const p = clean[clean.length - 1]; if (Math.hypot(pts[k][0] - p[0], pts[k][1] - p[1]) > 0.05) clean.push(pts[k]); }
+  let len = 0; for (let k = 1; k < clean.length; k++) len += Math.hypot(clean[k][0] - clean[k - 1][0], clean[k][1] - clean[k - 1][1]);
+  const maxDur = clamp(6 / speed, 1.2, 14);
+  v.path = clean; v.seg = 0; v.segT = 0; v.walking = clean.length > 1; v.dst = dst;
+  v.speed = Math.max(3.2 * v.spd, len / maxDur);
+  v.delay = v.rnd() * Math.min(1.6, 2.5 / speed);
+  if (!v.walking) { v.x = dst.x; v.z = dst.z; v.th = dst.th; v.sx = dst.x; v.sz = dst.z; v.sth = dst.th; v.wx = v.x; v.wz = v.z; }
+}
+function angTo(a, b, k) { let d = b - a; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return a + d * k; }
+
+const POSE = { stand: [0, 0.56, 1], sternal: [0, 0.33, 0.12], lateral: [1.38, 0.335, 1] };
+function updateSows(dt, dtw, t) {
+  const a = world.body.instanceMatrix.array, la = world.legs.instanceMatrix.array, ma = world.marks.instanceMatrix.array;
+  const pa = world.piglets.instanceMatrix.array; let pc = 0; const pmax = world.piglets.count;
+  for (let i = 0; i < vs.length; i++) {
+    const v = vs[i], s = farm.sows[i];
+    let pose = 'stand', moving = 0;
+    if (v.walking) {
+      if (v.delay > 0) { v.delay -= dtw; }
+      else {
+        let dist = v.speed * dtw;
+        while (dist > 0 && v.seg < v.path.length - 1) {
+          const [ax, az] = v.path[v.seg], [bx, bz] = v.path[v.seg + 1];
+          const sl = Math.hypot(bx - ax, bz - az), rem = sl * (1 - v.segT);
+          const tth = Math.atan2(-(bz - az), bx - ax);
+          v.th = angTo(v.th, tth, clamp(dt * 10, 0, 1));
+          if (dist >= rem) { dist -= rem; v.seg++; v.segT = 0; v.x = bx; v.z = bz; }
+          else { v.segT += dist / sl; dist = 0; v.x = ax + (bx - ax) * v.segT; v.z = az + (bz - az) * v.segT; }
+        }
+        moving = dtw > 0 ? 1 : 0;
+        if (v.seg >= v.path.length - 1) { v.walking = false; v.x = v.sx = v.dst.x; v.z = v.sz = v.dst.z; v.sth = v.dst.th; v.wx = v.x; v.wz = v.z; v.idle = 1 + v.rnd() * 3; v.lie = false; }
+      }
+    } else {
+      const zone = s.zone, ph = s.phase, cyc = (t * 0.7 + v.phaseOff) % 40;
+      if (zone === 'g') {
+        const dx = v.wx - v.x, dz = v.wz - v.z, dd = Math.hypot(dx, dz);
+        if (dd > 0.04 && !v.lie) { const st = Math.min(dd, 0.45 * dt); v.x += dx / dd * st; v.z += dz / dd * st; v.th = angTo(v.th, Math.atan2(-dz, dx), clamp(dt * 3, 0, 1)); moving = 0.6; }
+        else {
+          v.idle -= dt;
+          if (v.idle <= 0) {
+            if (!v.lie && v.rnd() < 0.3) { v.lie = true; v.idle = 6 + v.rnd() * 10; }
+            else { v.lie = false; const r = 0.55 * Math.sqrt(v.rnd()), an = v.rnd() * 6.28; v.wx = v.sx + Math.cos(an) * r; v.wz = v.sz + Math.sin(an) * r; v.idle = 2 + v.rnd() * 5; }
+          }
+        }
+        pose = v.lie ? 'sternal' : 'stand';
+      } else {
+        if (zone === 'cc') { v.th = angTo(v.th, v.sth, clamp(dt * 4, 0, 1)); pose = cyc < 9 ? 'sternal' : 'stand'; }
+        else if (zone === 'm') {
+          v.th = angTo(v.th, v.sth, clamp(dt * 4, 0, 1));
+          if (ph === 'lactante') { const c2 = (t * 0.9 + v.phaseOff) % 16; pose = c2 < 13.5 ? 'lateral' : 'stand'; v.nurse = c2 < 10; }
+          else pose = cyc < 14 ? 'sternal' : 'stand';
+        } else { pose = ph === 'lactante' ? 'lateral' : (cyc < 18 ? 'sternal' : 'stand'); v.nurse = true; }
+      }
+    }
+    const P = POSE[moving ? 'stand' : pose], kk = clamp(dt * 2.2, 0, 1);
+    v.roll = lerp(v.roll, P[0], kk); v.yc = lerp(v.yc, P[1], kk); v.ls = lerp(v.ls, P[2], kk);
+    v.gait += dt * (moving ? 9 * Math.min(2.2, 0.6 + v.speed * 0.12) : 0);
+    const sc = 0.93 + 0.022 * Math.min(s.parity, 6);
+    const bob = moving ? Math.abs(Math.sin(v.gait)) * 0.025 : Math.sin(t * 1.6 + v.phaseOff) * 0.006;
+    setPig(a, i * 16, v.x, v.z, v.th, v.roll, v.yc + bob, sc, 0.56);
+    for (let k = 0; k < 4; k++) { const hp = HIPS[k]; setLeg(la, (i * 4 + k) * 16, a, i * 16, hp[0], hp[1], hp[2], moving ? Math.sin(v.gait + hp[3]) * 0.5 : 0, v.ls); }
+    for (let k = 0; k < 16; k++) ma[i * 16 + k] = a[i * 16 + k];
+    // lechones
+    if (s.phase === 'lactante' && !v.walking && (s.zone === 'm' || s.zone === 'mOver') && pc < pmax) {
+      const n = Math.min(12, s.litter), age = clamp((simDay - v.farrowAt) / LACT, 0, 1), ps = 0.62 + 0.55 * age;
+      const lying = v.roll > 0.9, ct = Math.cos(v.th), st = Math.sin(v.th);
+      let cx, cz;
+      if (s.zone === 'm') { const c = lay.m.rooms[s.room].crates[s.slot]; cx = c.creepX; cz = c.creepZ; }
+      else { cx = v.x + st * -0.95; cz = v.z + ct * -0.95; }
+      for (let j = 0; j < n && pc < pmax; j++, pc++) {
+        if (lying && v.nurse) {
+          const row = j % 2, xl = -0.5 + Math.floor(j / 2) * 0.17 + Math.sin(t * 9 + j) * 0.012, zl = -(0.36 + row * 0.2) - 0.05 * age;
+          const wx = v.x + xl * ct + zl * st, wz = v.z - xl * st + zl * ct;
+          setPig(pa, pc * 16, wx, wz, Math.atan2(-ct, st) + (j % 3 - 1) * 0.2, 0, 0.13, ps, 0.13);
+        } else {
+          const an = j / n * Math.PI * 2 + i, rr = 0.1 + 0.08 * (j % 3) + 0.05 * age;
+          setPig(pa, pc * 16, cx + Math.cos(an) * rr, cz + Math.sin(an) * rr * 0.8, -an + Math.PI, 1.25, 0.09, ps * 0.95, 0.13);
+        }
+      }
+    }
+  }
+  // verraco recelando por los pasillos de cubrición
+  const B = world.boar, bp = world.boarPath, NS = vs.length;
+  if (dtw > 0 || dt > 0) {
+    const tgt = bp[(B.i + 1) % bp.length], dx = tgt[0] - B.x, dz = tgt[1] - B.z, dd = Math.hypot(dx, dz), st = 0.9 * dt;
+    if (dd <= st) { B.x = tgt[0]; B.z = tgt[1]; B.i = (B.i + 1) % bp.length; }
+    else { B.x += dx / dd * st; B.z += dz / dd * st; B.th = angTo(B.th, Math.atan2(-dz, dx), clamp(dt * 5, 0, 1)); }
+    B.gait += dt * 7;
+  }
+  setPig(a, NS * 16, B.x, B.z, B.th, 0, 0.56 + Math.abs(Math.sin(B.gait)) * 0.02, 1.2, 0.56);
+  for (let k = 0; k < 4; k++) { const hp = HIPS[k]; setLeg(la, (NS * 4 + k) * 16, a, NS * 16, hp[0], hp[1], hp[2], Math.sin(B.gait + hp[3]) * 0.45, 1); }
+  world.body.instanceMatrix.needsUpdate = true; world.legs.instanceMatrix.needsUpdate = true; world.marks.instanceMatrix.needsUpdate = true;
+  world.piglets.count = pc; world.piglets.instanceMatrix.needsUpdate = true;
+}
+
+function pulse(x, z, color) {
+  if (reduceMotion) return;
+  const p = world.pulses.find((q) => q.life <= 0); if (!p) return;
+  p.life = 1; p.me.position.set(x, 0.1, z); p.me.material.color.copy(color); p.me.visible = true;
+}
+function updatePulses(dt) {
+  for (const p of world.pulses) {
+    if (p.life <= 0) continue;
+    p.life -= dt / 1.3; const k = 1 - p.life;
+    p.me.scale.setScalar(1 + k * 1.8); p.me.material.opacity = Math.max(0, p.life) * 0.95;
+    if (p.life <= 0) p.me.visible = false;
+  }
+}
+
+// ---------- actividad ----------
+const logList = [];
+function logEvent(type, week, extra) {
+  const day = Math.floor(simDay), key = type + '|' + week + '|' + day;
+  let e = logList.find((q) => q.key === key);
+  if (!e) { e = { key, type, week, day, n: 0, extra }; logList.unshift(e); if (logList.length > 5) logList.pop(); }
+  e.n++;
+}
+function renderLog() {
+  const T = { wean: 'Destete', gest: 'Diagnóstico positivo', mat: 'Entrada a maternidad', serv: 'Cubrición', farrow: 'Partos' };
+  $('log').innerHTML = logList.map((e) => {
+    let tail = '';
+    const c = `${e.n} cerda${e.n === 1 ? '' : 's'}`;
+    if (e.type === 'wean') tail = `${c} → cubrición-control`;
+    else if (e.type === 'gest') tail = `${c} → corral ${e.extra + 1}`;
+    else if (e.type === 'mat') tail = `${c} → sala ${e.extra + 1}`;
+    else if (e.type === 'serv') tail = c;
+    else tail = `${e.n} camada${e.n === 1 ? '' : 's'}`;
+    return `<li><time>día ${e.day}</time><span><span class="dot" style="background:${loteHex(e.week)}"></span><b>${T[e.type]}</b> · lote ${loteOf(e.week)}: ${tail}</span></li>`;
+  }).join('') || '<li><time>—</time><span>La actividad de cada día aparece aquí.</span></li>';
+}
+
+function handleEvents() {
+  for (const e of farm.events) {
+    const s = farm.sows[e.id], v = vs[e.id];
+    if (e.type === 'move') {
+      startWalk(e.id, e.from, e.to);
+      if (e.to.zone === 'g') logEvent('gest', s.week, e.to.pen);
+      else if ((e.to.zone === 'm' || e.to.zone === 'mOver') && e.from.zone === 'g') logEvent('mat', s.week, e.to.room);
+    } else if (e.type === 'serv') {
+      v.mark = loteColor(s.week); world.marks.setColorAt(e.id, v.mark); world.marks.instanceColor.needsUpdate = true;
+      pulse(v.x, v.z, v.mark); logEvent('serv', s.week);
+    } else if (e.type === 'conf') pulse(v.x, v.z, PH_COL.gest);
+    else if (e.type === 'farrow') { v.farrowAt = simDay; pulse(v.x, v.z, PH_COL.gold); logEvent('farrow', s.week); }
+    else if (e.type === 'wean') {
+      v.mark = WHITE.clone(); world.marks.setColorAt(e.id, v.mark); world.marks.instanceColor.needsUpdate = true;
+      logEvent('wean', e.week);
+    }
+  }
+  farm.events.length = 0;
+}
+
+// ---------- paneles ----------
+let N = 504, IDC = 5, speed = 1, playing = !reduceMotion, selected = -1, labelsOn = true;
+function updateLabels(st) {
+  const W = world, d = farm.d;
+  W.lCC.innerHTML = `Cubrición-control<small>${st.cc} cerdas · ${Math.min(st.cc, d.stalls)}/${d.stalls} jaulas</small>`;
+  W.lG.innerHTML = `Gestación<small>${st.g} cerdas · ${st.pensUsed} de 13 corrales</small>`;
+  W.lM.innerHTML = `Maternidad<small>${st.m} cerdas · ${st.roomsUsed} de 6 salas</small>`;
+  st.rooms.forEach((r, i) => {
+    const el = W.lRooms[i];
+    if (r.n === 0) { el.className = 'lbl sm clean'; el.innerHTML = `Sala ${i + 1} · vacío sanitario`; }
+    else { el.className = 'lbl sm' + (r.over ? ' crit' : ''); const w = r.weeks[0]; el.innerHTML = `<span class="dot" style="background:${loteHex(w)}"></span>Sala ${i + 1} · lote ${loteOf(w)} · ${r.n}/${r.cap}`; }
+    const empty = r.n === 0, fm = W.roomFloors[i].material;
+    fm.color.set(empty ? PH_COL.clean : '#cfd6d8'); fm.emissive.set(empty ? PH_COL.clean : '#000'); fm.emissiveIntensity = empty ? 0.12 : 0;
+    W.sprays[i].pts.visible = empty && !reduceMotion;
+  });
+  st.pens.forEach((p, i) => {
+    const el = W.lPens[i];
+    if (p.n === 0) { el.className = 'lbl sm'; el.innerHTML = `Corral ${i + 1} · libre`; el.style.opacity = 0.7; }
+    else { el.style.opacity = 1; el.className = 'lbl sm'; el.innerHTML = `<span class="dot" style="background:${loteHex(p.weeks[0])}"></span>Lote ${loteOf(p.weeks[0])} · ${p.n}`; }
+  });
+  W.lCcOver.hidden = st.ccOver === 0; W.lCcOver.textContent = `Sin jaula: ${st.ccOver} cerdas esperando`;
+  W.lMOver.hidden = st.mOver === 0; W.lMOver.textContent = `Sin paridera: ${st.mOver} cerdas`;
+  // lámparas de calor encendidas en parideras con cerda
+  const col = W.glow.geometry.attributes.color; let k = 0;
+  const on = new THREE.Color('#ff6a2a');
+  lay.m.rooms.forEach((room, r) => room.crates.forEach((c, ci) => {
+    const id = farm.crates[r][ci]; const lit = id >= 0 && !vs[id].walking;
+    col.setXYZ(k++, lit ? on.r : 0, lit ? on.g : 0, lit ? on.b : 0);
+  }));
+  col.needsUpdate = true;
+}
+function updatePanels(st) {
+  const th = theory(N, IDC), d = farm.d;
+  $('pha').textContent = fmt(th.pha, 2);
+  $('formula').innerHTML = `365 ÷ (114 + 28 + ${IDC}) = 365 ÷ ${th.iep} = <strong>${fmt(th.pha, 2)}</strong> partos por hembra y año`;
+  $('iIdc').textContent = `${IDC} d`; $('iIep').textContent = `${th.iep} d`;
+  $('kSim').textContent = fmt(st.phaObs, 2);
+  $('kLote').textContent = fmt(th.perLote, 1);
+  $('kNpd').textContent = fmt(th.npd, 1);
+  const lot = (x) => fmt(x, 1);
+  const flag = (n, txt) => n > 0 ? `<span class="flag">${n} ${txt}</span>` : '';
+  const pl = (n) => n === 1 ? '' : 's';
+  $('tBody').innerHTML = `
+    <tr><td><span class="ph"><i style="background:var(--cc)"></i>Cubrición-control</span><small>IDC + 21 d hasta el diagnóstico</small></td><td>${th.cc.days}</td><td>${lot(th.cc.lotes)}</td><td>${Math.ceil(th.cc.plazas)}<small>jaulas</small></td><td>${Math.min(st.cc, d.stalls)} / ${d.stalls}<small>jaulas</small>${flag(st.ccOver, 'sin jaula')}</td></tr>
+    <tr><td><span class="ph"><i style="background:var(--gest)"></i>Gestación</span><small>114 − 21 − 7</small></td><td>${th.g.days}</td><td>${lot(th.g.lotes)}<small>12–13</small></td><td>${Math.ceil(th.g.plazas)}<small>plazas</small></td><td>${st.pensUsed} / 13<small>corrales · ${st.g} cerdas</small></td></tr>
+    <tr><td><span class="ph"><i style="background:var(--mat)"></i>Maternidad</span><small>7 d preparto + 28 d lactación</small></td><td>${th.m.days}</td><td>${lot(th.m.lotes)}<small>+1 en vacío</small></td><td>${Math.ceil(th.m.plazas)}<small>parideras</small></td><td>${st.roomsUsed} / 6<small>salas · ${st.m} cerdas</small>${flag(st.mOver, 'sin paridera')}</td></tr>
+    <tr class="total"><td>Ciclo completo</td><td>${th.iep}</td><td>${lot(th.iep / 7)}</td><td></td><td>${N}<small>cerdas</small></td></tr>`;
+  $('designNote').textContent = `La granja está construida para el objetivo de 5 días de IDC: 21 lotes de ${fmt(d.S, 1)} cerdas. ${IDC > 5 ? 'Con un IDC mayor, más cerdas pasan a lotes posteriores, se acumulan en cubrición-control y los lotes se descompensan.' : 'Prueba a subir el IDC y observa cubrición-control y el tamaño de los lotes.'}`;
+  const day = Math.floor(simDay);
+  $('clkDay').textContent = `Día ${day}`;
+  $('clkMeta').textContent = `${dowOf(simDay)} · semana ${Math.floor(simDay / 7) + 1}`;
+  renderLog();
+  if (selected >= 0) renderCard();
+}
+function renderCard() {
+  const s = farm.sows[selected], v = vs[selected];
+  $('scTag').textContent = String(selected + 1).padStart(4, '0');
+  const PH = { vacia: 'Vacía, esperando celo', cubierta: 'Cubierta, pendiente de diagnóstico', gestante: 'Gestante', preparto: 'Preparto', lactante: 'Lactante' };
+  const hasLote = s.f & 1;
+  $('scLote').innerHTML = hasLote ? `<span class="dot" style="background:${loteHex(s.week)}"></span>Lote ${loteOf(s.week)}` : 'Sin lote (aún sin cubrir)';
+  const where = { cc: 'Cubrición-control, jaula ' + (s.slot + 1), ccOver: 'Sin jaula (zona de espera)', g: 'Gestación, corral ' + (s.pen + 1), m: 'Maternidad, sala ' + (s.room + 1) + ', paridera ' + (s.slot + 1), mOver: 'Sin paridera' }[s.zone];
+  const rows = [['Fase', PH[s.phase]], ['Dónde', v.walking ? 'Caminando hacia: ' + where : where], ['Partos', s.parity]];
+  if (s.phase === 'vacia') rows.push(['Destete', `día ${s.wean}`], ['Cubrición prevista', `día ${s.serv} (IDC ${s.idc} d)`]);
+  if (s.phase === 'cubierta') rows.push(['Cubierta', `día ${s.serv} (IDC ${s.idc} d)`], ['Diagnóstico', `día ${nominalServ(s.week) + DIAG}`]);
+  if (s.phase === 'gestante' || s.phase === 'preparto') rows.push(['Día de gestación', Math.floor(simDay - s.serv)], ['Parto previsto', `día ${s.farrow} (${dowOf(s.farrow)})`]);
+  if (s.phase === 'lactante') rows.push(['Lechones', `${s.litter} · día ${Math.floor(simDay - s.farrow)} de lactación`], ['Destete', `día ${nominalServ(s.week) + GEST + LACT}`]);
+  $('scBody').innerHTML = rows.map(([k, x]) => `<dt>${k}</dt><dd>${x}</dd>`).join('');
+}
+
+// gráfico: cubriciones por semana
+function drawChart() {
+  const svg = $('chartSvg'), W = $('chart').clientWidth || 500, H = 150, cur = Math.floor(simDay / 7);
+  const n = 26, w0 = cur - n + 1, S = farm.d.S, cap = farm.d.crates;
+  const vals = []; for (let w = w0; w <= cur; w++) vals.push({ w, v: farm.servByWeek.get(w) || 0, partial: w === cur });
+  const maxV = Math.max(cap * 1.15, ...vals.map((q) => q.v)) || 1;
+  const L = 30, R = 64, T = 8, B = 22, pw = W - L - R, ph = H - T - B, bw = pw / n;
+  const y = (x) => T + ph - (x / maxV) * ph;
+  let g = '';
+  const ticks = [0, Math.round(maxV / 2), Math.round(maxV)];
+  for (const tk of ticks) g += `<line x1="${L}" x2="${L + pw}" y1="${y(tk)}" y2="${y(tk)}" stroke="var(--grid)"/><text class="axis" x="${L - 6}" y="${y(tk) + 3.5}" text-anchor="end">${tk}</text>`;
+  vals.forEach((q, i) => {
+    const x = L + i * bw + 1, bh = Math.max(0, T + ph - y(q.v)), wdt = Math.max(1, bw - 2), over = q.v > cap;
+    const fill = over ? 'var(--crit)' : 'var(--bar)';
+    if (bh > 0) {
+      const r = Math.min(4, wdt / 2, bh);
+      g += `<path d="M${x},${T + ph} V${T + ph - bh + r} Q${x},${T + ph - bh} ${x + r},${T + ph - bh} H${x + wdt - r} Q${x + wdt},${T + ph - bh} ${x + wdt},${T + ph - bh + r} V${T + ph} Z" fill="${fill}" opacity="${q.partial ? 0.45 : 1}"/>`;
+    }
+    g += `<rect x="${x}" y="${T + ph + 3}" width="${wdt}" height="4" rx="1" fill="${loteHex(q.w)}"/>`;
+    g += `<rect x="${L + i * bw}" y="${T}" width="${bw}" height="${ph + 10}" fill="transparent" data-i="${i}"/>`;
+  });
+  g += `<line x1="${L}" x2="${L + pw}" y1="${y(S)}" y2="${y(S)}" stroke="var(--ink)" stroke-dasharray="4 3" stroke-width="1.2"/><text class="ref" x="${L + pw + 6}" y="${y(S) + 3.5}" fill="var(--ink2)">objetivo ${fmt(S, 1)}</text>`;
+  g += `<line x1="${L}" x2="${L + pw}" y1="${y(cap)}" y2="${y(cap)}" stroke="var(--crit)" stroke-dasharray="1.5 3" stroke-width="1.4"/><text class="ref" x="${L + pw + 6}" y="${y(cap) - 3}" fill="var(--crit)">parideras ${cap}</text>`;
+  g += `<text class="axis" x="${L}" y="${H - 2}">hace ${n - 1} semanas</text><text class="axis" x="${L + pw}" y="${H - 2}" text-anchor="end">esta semana</text>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.innerHTML = g; svg._vals = vals; svg._geom = { L, bw, T, ph, y };
+  $('chartMeta').textContent = `media últimas 21: ${fmt(vals.slice(-22, -1).reduce((a, q) => a + q.v, 0) / 21, 1)}`;
+}
+function chartHover(ev) {
+  const svg = $('chartSvg'), tip = $('tip'), t = ev.target;
+  if (!t.dataset || t.dataset.i === undefined) { tip.hidden = true; return; }
+  const q = svg._vals[+t.dataset.i], G = svg._geom, box = svg.getBoundingClientRect(), sx = box.width / (svg.viewBox.baseVal.width || box.width);
+  tip.hidden = false;
+  tip.innerHTML = `<b>${q.w >= 0 ? 'Semana ' + (q.w + 1) : 'Antes del inicio'}</b> · lote ${loteOf(q.w)}<br>${q.v} cubriciones${q.partial ? ' (semana en curso)' : ''}${q.v > farm.d.crates ? ' · no caben en una sala' : ''}`;
+  tip.style.left = ((G.L + (+t.dataset.i + 0.5) * G.bw) * sx) + 'px'; tip.style.top = (G.y(q.v) * sx - 6) + 'px';
+}
+
+// ---------- cámara ----------
+let camAnim = null;
+function viewBox(key) {
+  const L = lay; if (key === 'cc') return [L.cc.x0, L.cc.z0, L.cc.x1, L.cc.z1 + 5];
+  if (key === 'g') return [L.g.x0, L.g.z0, L.g.x1, L.g.z1]; if (key === 'm') return [L.m.x0, L.m.z0, L.m.x1, L.m.z1 + 5];
+  const S = L.site; return [S.minX + 4, S.minZ + 4, S.maxX - 4, S.maxZ - 4];
+}
+function flyTo(key, instant = false) {
+  const [x0, z0, x1, z1] = viewBox(key), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  const dir = new THREE.Vector3(0.22, 0.8, 0.72).normalize();
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), aspect = camera.aspect || 1.6;
+  const wide = stage.clientWidth > 900;
+  const frac = key === 'all' ? (wide ? 0.86 : 0.98) : (wide ? 0.62 : 0.95);
+  const dW = ((x1 - x0) / 2) / (tanV * aspect * frac);
+  const dD = (((z1 - z0) * Math.sin(Math.asin(dir.y)) + 5) / 2) / (tanV * (wide && key === 'all' ? 0.9 : 0.8));
+  const dist = Math.max(dW, dD, 14);
+  const tgt = new THREE.Vector3(cx, 0, cz + (key === 'all' ? (z1 - z0) * 0.04 : 0));
+  const to = tgt.clone().addScaledVector(dir, dist);
+  if (instant) { camera.position.copy(to); controls.target.copy(tgt); controls.update(); return; }
+  camAnim = { t: 0, p0: camera.position.clone(), t0: controls.target.clone(), p1: to, t1: tgt };
+}
+function updateCam(dt) {
+  if (!camAnim) return;
+  camAnim.t = Math.min(1, camAnim.t + dt / 1.3); const k = camAnim.t < 0.5 ? 4 * camAnim.t ** 3 : 1 - (-2 * camAnim.t + 2) ** 3 / 2;
+  camera.position.lerpVectors(camAnim.p0, camAnim.p1, k); controls.target.lerpVectors(camAnim.t0, camAnim.t1, k);
+  if (camAnim.t >= 1) camAnim = null;
+}
+
+// ---------- ciclo principal ----------
+const clock = new THREE.Clock();
+let acc = 0, accChart = 0, lastWeek = -99, wall = 0;
+function rebuild() {
+  disposeWorld();
+  farm = new Farm(N, IDC, 7); lay = buildLayout(farm.d); simDay = 0; logList.length = 0;
+  world = buildWorld(lay, farm.d);
+  initSows(); buildRing(); applyTheme();
+  $('nHint').textContent = `21 lotes de ${fmt(N / 21, 1)} cerdas · ${farm.d.stalls} jaulas, 13 corrales, 6 salas de ${farm.d.crates} parideras`;
+  selected = -1; $('sowCard').hidden = true;
+  const st = farm.stats(); updateLabels(st); updatePanels(st); drawChart();
+  flyTo(currentView, true);
+}
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, clock.getDelta()); wall += dt;
+  const dtw = playing ? dt : 0;
+  if (playing) simDay += dt * speed;
+  farm.step(simDay); handleEvents();
+  updateSows(dt, dtw, wall);
+  updatePulses(dt);
+  for (const sp of world.sprays) if (sp.pts.visible) {
+    const p = sp.pts.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) { let yy = p.getY(i) - dt * (1.2 + sp.seed[i]); if (yy < 0) yy += 1.4; p.setY(i, yy); }
+    p.needsUpdate = true;
+  }
+  if (selected >= 0) { const v = vs[selected]; world.sel.position.set(v.x, 0, v.z); world.sel.children[0].position.y = 2.2 + Math.sin(wall * 3) * 0.12; }
+  updateCam(dt); controls.update();
+  const dist = camera.position.distanceTo(controls.target);
+  $('labels').classList.toggle('small-off', dist > Math.max(55, (lay.site.maxX - lay.site.minX) * 0.8));
+  acc += dt; accChart += dt;
+  if (acc > 0.25) { acc = 0; const st = farm.stats(); updateLabels(st); updatePanels(st); }
+  const wk = Math.floor(simDay / 7);
+  if (accChart > 1 || wk !== lastWeek) { accChart = 0; lastWeek = wk; drawChart(); }
+  renderer.render(scene, camera); labelRenderer.render(scene, camera);
+}
+
+// ---------- interacción ----------
+let currentView = 'all';
+function bindUI() {
+  const nR = $('nSows'), nN = $('nSowsNum');
+  const setN = (v) => { v = clamp(Math.round(+v || 504), 42, 1500); nR.value = nN.value = v; if (v !== N) { N = v; rebuild(); } };
+  nR.addEventListener('input', () => { nN.value = nR.value; $('nHint').textContent = `21 lotes de ${fmt(nR.value / 21, 1)} cerdas (suelta para reconstruir)`; });
+  nR.addEventListener('change', () => setN(nR.value));
+  nN.addEventListener('change', () => setN(nN.value));
+  const iR = $('idc');
+  iR.addEventListener('input', () => { IDC = +iR.value; $('idcOut').textContent = IDC; farm.idcMean = IDC; buildRing(); updatePanels(farm.stats()); });
+  $('play').addEventListener('click', () => { playing = !playing; $('play').textContent = playing ? 'Pausar' : 'Reproducir'; });
+  $('play').textContent = playing ? 'Pausar' : 'Reproducir';
+  $('speed').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; speed = +b.dataset.s; for (const x of $('speed').children) x.setAttribute('aria-pressed', x === b); });
+  $('reset').addEventListener('click', () => rebuild());
+  $('views').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; currentView = b.dataset.view; for (const x of $('views').children) x.setAttribute('aria-pressed', x === b); flyTo(currentView); });
+  $('tLabels').addEventListener('click', () => { labelsOn = !labelsOn; $('tLabels').setAttribute('aria-pressed', labelsOn); $('labels').classList.toggle('lbls-off', !labelsOn); });
+  $('tRotate').addEventListener('click', () => { controls.autoRotate = !controls.autoRotate; $('tRotate').setAttribute('aria-pressed', controls.autoRotate); });
+  $('scClose').addEventListener('click', () => { selected = -1; $('sowCard').hidden = true; world.sel.visible = false; });
+  $('chartSvg').addEventListener('pointermove', chartHover); $('chartSvg').addEventListener('pointerleave', () => { $('tip').hidden = true; });
+  // clic sobre una cerda
+  const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 6) return;
+    const r = renderer.domElement.getBoundingClientRect();
+    ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ptr, camera);
+    world.body.computeBoundingSphere();
+    const hit = ray.intersectObject(world.body, false).find((h) => h.instanceId < vs.length);
+    if (hit) { selected = hit.instanceId; $('sowCard').hidden = false; world.sel.visible = true; renderCard(); }
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { applyTheme(); buildRing(); });
+  new MutationObserver(() => { applyTheme(); buildRing(); drawChart(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+}
+
+try {
+  initRenderer();
+  rebuild();
+  bindUI();
+  $('loading').hidden = true;
+  tick();
+} catch (err) {
+  console.error(err);
+  const l = $('loading'); l.hidden = false; l.classList.add('err');
+  l.textContent = 'No se pudo iniciar la vista 3D en este navegador (' + (err && err.message ? err.message : err) + '). Prueba con un navegador actualizado con WebGL activado.';
+}
+
+</script>
+
+</body>
+</html>

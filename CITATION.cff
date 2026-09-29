@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "Si utiliza este material, cítelo como se indica a continuación."
+title: "Granja de cerdas en bandas: simulador 3D del manejo en banda semanal"
+type: software
+authors:
+  - family-names: "Argüello Henríquez"
+    given-names: "Anastasio"
+    orcid: "https://orcid.org/0000-0002-4426-0678"
+    affiliation: "Universidad de Las Palmas de Gran Canaria"
+version: "1.0.0"
+date-released: "2026-09-29"
+license: CC-BY-NC-SA-4.0
+abstract: "Simulador 3D docente del manejo de cerdas reproductoras en banda semanal. Representa el movimiento de los lotes entre cubrición-control, gestación y maternidad y calcula los partos por hembra y año en función del número de cerdas y del intervalo destete-cubrición efectiva."
+keywords:
+  - producción porcina
+  - manejo en bandas
+  - banda semanal
+  - partos por hembra y año
+  - docencia
+  - simulación
